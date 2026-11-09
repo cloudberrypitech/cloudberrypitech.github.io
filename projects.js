@@ -13,5 +13,11 @@ window.projectsDB = [
         description: "An offline book reader compatible with macOS, Linux and Windows, built mainly with Python.",
         link: "https://github.com/cloudberrypitech/kwiddle",
         tags: ["Python", "Book", "Kindle", "Kwiddle"]
+    },
+    {
+        name: "Kwloader",
+        description: "Book Loader for Kwiddle book reader",
+        link: "https://github.com/cloudberrypitech/kwloader",
+        tags: ["Python", "Book", "Kindle", "Kwiddle", "Loader"]
     }
 ];
