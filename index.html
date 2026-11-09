@@ -1,16 +1,23 @@
+
 <!DOCTYPE html>
 <html lang="en" data-theme="dark">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
     <title>CloudberryPiTech | Digital Lab</title>
+
+    <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono&display=swap" rel="stylesheet">
-    
-    <!-- DATABASE FILES LOADED HERE -->
-    <!-- These are now .js files so they work on Localhost and GitHub Pages without CORS errors -->
-    <script src="projects.js"></script>
-    <script src="games.js"></script>
+
+    <!-- Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&family=JetBrains+Mono&display=swap"
+          rel="stylesheet">
+
+    <!-- Database files: preserve loading order -->
+    <script src="projects.js?v=4" defer></script>
+    <script src="games.js?v=4" defer></script>
 
     <style>
         :root {
@@ -33,192 +40,699 @@
             transition: all 0.3s ease;
         }
 
-        .accent-text { color: var(--accent); }
-        .accent-bg { background-color: var(--accent); }
-        .accent-border { border-color: var(--accent); }
+        .accent-text {
+            color: var(--accent);
+        }
+
+        .accent-bg {
+            background-color: var(--accent);
+        }
+
+        .accent-border {
+            border-color: var(--accent);
+        }
 
         .glass {
             background: var(--card-bg);
             border: 1px solid rgba(128, 128, 128, 0.2);
-            box-shadow: 0 10px 30px -10px rgba(0,0,0,0.3);
+            box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.3);
         }
 
-        .mono { font-family: 'JetBrains Mono', monospace; }
+        .mono {
+            font-family: 'JetBrains Mono', monospace;
+        }
 
-        ::-webkit-scrollbar { width: 8px; }
-        ::-webkit-scrollbar-track { background: var(--bg); }
-        ::-webkit-scrollbar-thumb { background: var(--accent); border-radius: 10px; }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--accent);
+            border-radius: 10px;
+        }
 
         #settings-modal {
             backdrop-filter: blur(8px);
             display: none;
         }
+
+        html {
+            scroll-behavior: smooth;
+        }
     </style>
 </head>
+
 <body class="min-h-screen selection:bg-blue-500 selection:text-white">
 
+    <!-- NAVIGATION -->
     <nav class="fixed w-full z-40 px-6 py-4">
         <div class="max-w-7xl mx-auto flex justify-between items-center glass rounded-2xl px-6 py-3">
+
             <div class="text-xl font-extrabold tracking-tighter uppercase italic">
                 Cloudberry<span class="accent-text">Pi</span>Tech
             </div>
+
             <div class="flex items-center gap-6">
+
                 <div class="hidden md:flex gap-6 font-medium text-sm">
-                    <a href="#projects" class="hover:opacity-70 transition">Projects</a>
-                    <a href="#games" class="hover:opacity-70 transition">Games</a>
+                    <a href="#projects" class="hover:opacity-70 transition">
+                        Projects
+                    </a>
+
+                    <a href="#games" class="hover:opacity-70 transition">
+                        Games
+                    </a>
                 </div>
-                <button onclick="toggleSettings()" class="p-2 rounded-lg hover:bg-gray-500/20 transition">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9l.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1 1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82z"/></svg>
+
+                <button onclick="toggleSettings()"
+                        aria-label="Open settings"
+                        class="p-2 rounded-lg hover:bg-gray-500/20 transition">
+
+                    <svg xmlns="http://www.w3.org/2000/svg"
+                         width="20" height="20"
+                         viewBox="0 0 24 24"
+                         fill="none"
+                         stroke="currentColor"
+                         stroke-width="2"
+                         stroke-linecap="round"
+                         stroke-linejoin="round">
+
+                        <circle cx="12" cy="12" r="3"/>
+
+                        <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9l.06-.06a2 2 0 0 0 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33 1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82 1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+                    </svg>
                 </button>
+
             </div>
         </div>
     </nav>
 
+
+    <!-- HERO SECTION -->
     <header class="pt-32 pb-20 px-6">
+
         <div class="max-w-7xl mx-auto grid md:grid-cols-2 gap-12 items-center">
+
             <div>
-                <span class="mono text-xs accent-text font-bold uppercase tracking-widest">Engineering the Void</span>
-                <h1 class="text-6xl md:text-8xl font-extrabold leading-tight mt-4">Build. <br>Play. <span class="accent-text">Iterate.</span></h1>
+                <span class="mono text-xs accent-text font-bold uppercase tracking-widest">
+                    Engineering the Void
+                </span>
+
+                <h1 class="text-6xl md:text-8xl font-extrabold leading-tight mt-4">
+                    Build. <br>
+                    Play. <span class="accent-text">Iterate.</span>
+                </h1>
+
                 <p class="text-slate-400 text-lg mt-6 max-w-md leading-relaxed">
-                    A digital sandbox of experimental software and interactive games. Pushing the boundaries of what a browser can do.
+                    A digital sandbox of experimental software and interactive games.
+                    Pushing the boundaries of what a browser can do.
                 </p>
             </div>
+
             <div class="grid grid-cols-2 gap-4">
+
                 <div class="glass p-8 rounded-3xl h-40 flex flex-col justify-end">
                     <span class="text-4xl font-bold accent-text">10+</span>
                     <span class="text-sm opacity-60">Projects Finished</span>
                 </div>
+
                 <div class="glass p-8 rounded-3xl h-40 mt-8 flex flex-col justify-end">
                     <span class="text-4xl font-bold accent-text">∞</span>
                     <span class="text-sm opacity-60">Coffee Consumed</span>
                 </div>
+
             </div>
         </div>
     </header>
 
+
+    <!-- PORTFOLIO SECTION -->
     <section id="projects" class="py-20 px-6 max-w-7xl mx-auto">
+
         <div class="flex justify-between items-end mb-12">
+
             <div>
-                <h2 class="text-4xl font-bold">Portfolio</h2>
-                <p class="opacity-50">Selected works and open source tools.</p>
+                <h2 class="text-4xl font-bold">
+                    Portfolio
+                </h2>
+
+                <p class="opacity-50">
+                    Selected works and open source tools.
+                </p>
             </div>
+
         </div>
-        <div id="projects-grid" class="grid grid-cols-1 md:grid-cols-3 gap-6"></div>
+
+        <!-- Projects are inserted here by JavaScript -->
+        <div id="projects-grid"
+             class="grid grid-cols-1 md:grid-cols-3 gap-6">
+
+            <p class="mono text-xs opacity-50">
+                Loading projects...
+            </p>
+
+        </div>
+
     </section>
 
-    <section id="games" class="py-20 px-6 max-w-7xl mx-auto mb-20">
+
+    <!-- GAMING SECTION -->
+    <section id="games"
+             class="py-20 px-6 max-w-7xl mx-auto mb-20">
+
         <div class="glass p-12 rounded-[3rem] overflow-hidden relative">
+
             <div class="relative z-10">
-                <h2 class="text-4xl font-bold mb-2">Gaming Arcade</h2>
-                <p class="opacity-50 mb-12">Dive into interactive experiences.</p>
-                <div id="games-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6"></div>
+
+                <h2 class="text-4xl font-bold mb-2">
+                    Gaming Arcade
+                </h2>
+
+                <p class="opacity-50 mb-12">
+                    Dive into interactive experiences.
+                </p>
+
+                <!-- Games are inserted here by JavaScript -->
+                <div id="games-grid"
+                     class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    <p class="mono text-xs opacity-50">
+                        Loading games...
+                    </p>
+
+                </div>
+
             </div>
-            <div class="absolute -top-24 -right-24 w-64 h-64 accent-bg opacity-10 blur-3xl rounded-full"></div>
+
+            <div class="absolute -top-24 -right-24 w-64 h-64 accent-bg opacity-10 blur-3xl rounded-full">
+            </div>
+
         </div>
     </section>
 
-    <div id="settings-modal" class="fixed inset-0 z-50 flex items-center justify-center p-6">
+
+    <!-- SETTINGS MODAL -->
+    <div id="settings-modal"
+         class="fixed inset-0 z-50 items-center justify-center p-6"
+         onclick="if(event.target === this) toggleSettings()">
+
         <div class="glass w-full max-w-md p-8 rounded-3xl">
+
             <div class="flex justify-between items-center mb-8">
-                <h3 class="text-2xl font-bold">Lab Settings</h3>
-                <button onclick="toggleSettings()" class="text-sm opacity-50 hover:opacity-100">Close</button>
+
+                <h3 class="text-2xl font-bold">
+                    Lab Settings
+                </h3>
+
+                <button onclick="toggleSettings()"
+                        class="text-sm opacity-50 hover:opacity-100">
+                    Close
+                </button>
+
             </div>
+
             <div class="space-y-6">
+
+                <!-- THEME -->
                 <div>
-                    <label class="text-sm opacity-60 block mb-3">Visual Theme</label>
+
+                    <label class="text-sm opacity-60 block mb-3">
+                        Visual Theme
+                    </label>
+
                     <div class="flex gap-3">
-                        <button onclick="setTheme('dark')" class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm border border-slate-600">Dark</button>
-                        <button onclick="setTheme('light')" class="px-4 py-2 rounded-lg bg-white text-slate-900 text-sm border border-slate-200">Light</button>
+
+                        <button onclick="setTheme('dark')"
+                                class="px-4 py-2 rounded-lg bg-slate-800 text-white text-sm border border-slate-600">
+                            Dark
+                        </button>
+
+                        <button onclick="setTheme('light')"
+                                class="px-4 py-2 rounded-lg bg-white text-slate-900 text-sm border border-slate-200">
+                            Light
+                        </button>
+
                     </div>
                 </div>
+
+
+                <!-- ACCENT COLOR -->
                 <div>
-                    <label class="text-sm opacity-60 block mb-3">Accent Color</label>
+
+                    <label class="text-sm opacity-60 block mb-3">
+                        Accent Color
+                    </label>
+
                     <div class="flex gap-3">
-                        <button onclick="setAccent('#3b82f6')" class="w-8 h-8 rounded-full bg-blue-500 border-2 border-transparent hover:border-white transition"></button>
-                        <button onclick="setAccent('#a855f7')" class="w-8 h-8 rounded-full bg-purple-500 border-2 border-transparent hover:border-white transition"></button>
-                        <button onclick="setAccent('#22c55e')" class="w-8 h-8 rounded-full bg-green-500 border-2 border-transparent hover:border-white transition"></button>
-                        <button onclick="setAccent('#ef4444')" class="w-8 h-8 rounded-full bg-red-500 border-2 border-transparent hover:border-white transition"></button>
-                        <button onclick="setAccent('#f59e0b')" class="w-8 h-8 rounded-full bg-amber-500 border-2 border-transparent hover:border-white transition"></button>
+
+                        <button onclick="setAccent('#3b82f6')"
+                                aria-label="Blue"
+                                class="w-8 h-8 rounded-full bg-blue-500 border-2 border-transparent hover:border-white transition">
+                        </button>
+
+                        <button onclick="setAccent('#a855f7')"
+                                aria-label="Purple"
+                                class="w-8 h-8 rounded-full bg-purple-500 border-2 border-transparent hover:border-white transition">
+                        </button>
+
+                        <button onclick="setAccent('#22c55e')"
+                                aria-label="Green"
+                                class="w-8 h-8 rounded-full bg-green-500 border-2 border-transparent hover:border-white transition">
+                        </button>
+
+                        <button onclick="setAccent('#ef4444')"
+                                aria-label="Red"
+                                class="w-8 h-8 rounded-full bg-red-500 border-2 border-transparent hover:border-white transition">
+                        </button>
+
+                        <button onclick="setAccent('#f59e0b')"
+                                aria-label="Amber"
+                                class="w-8 h-8 rounded-full bg-amber-500 border-2 border-transparent hover:border-white transition">
+                        </button>
+
                     </div>
                 </div>
+
             </div>
         </div>
     </div>
 
+
+    <!-- FOOTER -->
     <footer class="py-12 text-center opacity-40 text-sm mono">
         &copy; 2026 CLOUDBERRYPITECH / ALL SYSTEMS OPERATIONAL
     </footer>
 
+
+    <!-- MAIN JAVASCRIPT -->
     <script>
-        // --- COOKIE ENGINE ---
+
+        // =====================================
+        // COOKIE ENGINE
+        // =====================================
+
         function setCookie(name, value) {
-            document.cookie = `${name}=${value}; path=/; max-age=31536000`;
+            document.cookie =
+                `${name}=${encodeURIComponent(value)}; path=/; max-age=31536000; SameSite=Lax`;
         }
 
         function getCookie(name) {
-            const value = `; ${document.cookie}`;
-            const parts = value.split(`; ${name}=`);
-            if (parts.length === 2) return parts.pop().split(';').shift();
+            const prefix = `${name}=`;
+
+            const cookie = document.cookie
+                .split("; ")
+                .find(item => item.startsWith(prefix));
+
+            if (!cookie) return null;
+
+            return decodeURIComponent(cookie.substring(prefix.length));
         }
+
+
+        // =====================================
+        // THEME SETTINGS
+        // =====================================
 
         function setTheme(theme) {
-            document.documentElement.setAttribute('data-theme', theme);
-            setCookie('theme', theme);
+
+            if (!["dark", "light"].includes(theme)) {
+                return;
+            }
+
+            document.documentElement.setAttribute(
+                "data-theme",
+                theme
+            );
+
+            setCookie("theme", theme);
         }
+
 
         function setAccent(color) {
-            document.documentElement.style.setProperty('--accent', color);
-            setCookie('accent', color);
+
+            const allowedColors = [
+                "#3b82f6",
+                "#a855f7",
+                "#22c55e",
+                "#ef4444",
+                "#f59e0b"
+            ];
+
+            if (!allowedColors.includes(color)) {
+                return;
+            }
+
+            document.documentElement.style.setProperty(
+                "--accent",
+                color
+            );
+
+            setCookie("accent", color);
         }
+
+
+        // =====================================
+        // SETTINGS MODAL
+        // =====================================
 
         function toggleSettings() {
-            const modal = document.getElementById('settings-modal');
-            modal.style.display = modal.style.display === 'flex' ? 'none' : 'flex';
+
+            const modal = document.getElementById(
+                "settings-modal"
+            );
+
+            const isHidden =
+                getComputedStyle(modal).display === "none";
+
+            modal.style.display = isHidden ? "flex" : "none";
         }
 
+
         function loadSettings() {
-            const savedTheme = getCookie('theme') || 'dark';
-            const savedAccent = getCookie('accent') || '#3b82f6';
+
+            const savedTheme =
+                getCookie("theme") || "dark";
+
+            const savedAccent =
+                getCookie("accent") || "#3b82f6";
+
             setTheme(savedTheme);
             setAccent(savedAccent);
         }
 
-        // --- RENDERING LOGIC ---
-        function initSite() {
-            loadSettings();
 
-            // Rendering Projects
-            if (typeof projectsDB !== 'undefined') {
-                document.getElementById('projects-grid').innerHTML = projectsDB.map(p => `
-                    <div class="glass p-6 rounded-3xl group hover:-translate-y-2 transition-all duration-300">
-                        <div class="flex gap-2 mb-4">
-                            ${p.tags.map(t => `<span class="mono text-[10px] accent-bg text-white px-2 py-0.5 rounded-full">${t}</span>`).join('')}
-                        </div>
-                        <h3 class="text-xl font-bold mb-2">${p.name}</h3>
-                        <p class="text-sm opacity-60 mb-6">${p.description}</p>
-                        <a href="${p.link}" target="_blank" class="text-sm font-bold accent-text flex items-center gap-2 group-hover:gap-3 transition-all">
-                            Explore Project <span>&rarr;</span>
-                        </a>
-                    </div>
-                `).join('');
-            } else {
-                document.getElementById('projects-grid').innerHTML = `<p class="mono text-red-500">projects.js not found!</p>`;
+        // =====================================
+        // HTML ESCAPING
+        // =====================================
+
+        function escapeHTML(value) {
+
+            return String(value ?? "").replace(
+                /[&<>"']/g,
+
+                character => ({
+                    "&": "&amp;",
+                    "<": "&lt;",
+                    ">": "&gt;",
+                    '"': "&quot;",
+                    "'": "&#039;"
+                })[character]
+            );
+        }
+
+
+        // =====================================
+        // DATABASE ACCESS
+        // Supports both old const and new window databases.
+        // =====================================
+
+        function getProjectsDatabase() {
+
+            if (Array.isArray(window.projectsDB)) {
+                return window.projectsDB;
             }
 
-            // Rendering Games
-            if (typeof gamesDB !== 'undefined') {
-                document.getElementById('games-grid').innerHTML = gamesDB.map(g => `
-                    <div class="bg-white/5 p-6 rounded-2xl border border-white/10 hover:border-white/30 transition group">
-                        <h3 class="text-lg font-bold mb-1">${g.name}</h3>
-                        <p class="text-xs opacity-50 mb-4">${g.description}</p>
-                        <a href="${g.link}" class="block text-center py-2 rounded-xl accent-bg text-white font-bold text-sm hover:opacity-90 transition">Launch Game</a>
-                    </div>
-                `).join('');
-            } else {
-                document.getElementById('games-grid').innerHTML = `<p class="mono text-red-500">games.js not found!</p>`;
+            if (
+                typeof projectsDB !== "undefined" &&
+                Array.isArray(projectsDB)
+            ) {
+                return projectsDB;
+            }
+
+            return null;
+        }
+
+
+        function getGamesDatabase() {
+
+            if (Array.isArray(window.gamesDB)) {
+                return window.gamesDB;
+            }
+
+            if (
+                typeof gamesDB !== "undefined" &&
+                Array.isArray(gamesDB)
+            ) {
+                return gamesDB;
+            }
+
+            return null;
+        }
+
+
+        // =====================================
+        // URL VALIDATION
+        // =====================================
+
+        function safeURL(value) {
+
+            try {
+
+                const url = new URL(
+                    value,
+                    window.location.href
+                );
+
+                if (
+                    url.protocol === "https:" ||
+                    url.protocol === "http:"
+                ) {
+                    return escapeHTML(url.href);
+                }
+
+                return "#";
+
+            } catch {
+                return "#";
             }
         }
-        window.onload = initSite;
+
+
+        // =====================================
+        // RENDER PROJECTS
+        // =====================================
+
+        function renderProjects() {
+
+            const grid = document.getElementById(
+                "projects-grid"
+            );
+
+            if (!grid) {
+                console.error("Projects grid not found.");
+                return;
+            }
+
+            const projects = getProjectsDatabase();
+
+            if (!projects) {
+
+                grid.innerHTML = `
+                    <p class="mono text-red-500">
+                        Unable to load projects.js.
+                        Check the browser console.
+                    </p>
+                `;
+
+                console.error(
+                    "projectsDB is missing or invalid."
+                );
+
+                return;
+            }
+
+            if (projects.length === 0) {
+
+                grid.innerHTML = `
+                    <p class="opacity-50">
+                        No projects available yet.
+                    </p>
+                `;
+
+                return;
+            }
+
+            grid.innerHTML = projects.map(project => {
+
+                const tags = Array.isArray(project.tags)
+                    ? project.tags
+                    : [];
+
+                const name = escapeHTML(
+                    project.name || "Untitled Project"
+                );
+
+                const description = escapeHTML(
+                    project.description || ""
+                );
+
+                const link = safeURL(
+                    project.link || "#"
+                );
+
+                return `
+
+                    <div class="glass p-6 rounded-3xl group hover:-translate-y-2 transition-all duration-300">
+
+                        <div class="flex gap-2 mb-4 flex-wrap">
+
+                            ${tags.map(tag => `
+                                <span class="mono text-[10px] accent-bg text-white px-2 py-0.5 rounded-full">
+                                    ${escapeHTML(tag)}
+                                </span>
+                            `).join("")}
+
+                        </div>
+
+                        <h3 class="text-xl font-bold mb-2">
+                            ${name}
+                        </h3>
+
+                        <p class="text-sm opacity-60 mb-6">
+                            ${description}
+                        </p>
+
+                        <a
+                            href="${link}"
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            class="text-sm font-bold accent-text flex items-center gap-2 group-hover:gap-3 transition-all"
+                        >
+                            Explore Project
+                            <span>&rarr;</span>
+                        </a>
+
+                    </div>
+
+                `;
+
+            }).join("");
+        }
+
+
+        // =====================================
+        // RENDER GAMES
+        // =====================================
+
+        function renderGames() {
+
+            const grid = document.getElementById(
+                "games-grid"
+            );
+
+            if (!grid) {
+                console.error("Games grid not found.");
+                return;
+            }
+
+            const games = getGamesDatabase();
+
+            if (!games) {
+
+                grid.innerHTML = `
+                    <p class="mono text-red-500">
+                        Unable to load games.js.
+                    </p>
+                `;
+
+                console.error(
+                    "gamesDB is missing or invalid."
+                );
+
+                return;
+            }
+
+            if (games.length === 0) {
+
+                grid.innerHTML = `
+                    <p class="opacity-50">
+                        No games available yet.
+                    </p>
+                `;
+
+                return;
+            }
+
+            grid.innerHTML = games.map(game => {
+
+                const name = escapeHTML(
+                    game.name || "Untitled Game"
+                );
+
+                const description = escapeHTML(
+                    game.description || ""
+                );
+
+                const link = safeURL(
+                    game.link || "#"
+                );
+
+                return `
+
+                    <div class="bg-white/5 p-6 rounded-2xl border border-white/10 hover:border-white/30 transition group">
+
+                        <h3 class="text-lg font-bold mb-1">
+                            ${name}
+                        </h3>
+
+                        <p class="text-xs opacity-50 mb-4">
+                            ${description}
+                        </p>
+
+                        <a
+                            href="${link}"
+                            class="block text-center py-2 rounded-xl accent-bg text-white font-bold text-sm hover:opacity-90 transition"
+                        >
+                            Launch Game
+                        </a>
+
+                    </div>
+
+                `;
+
+            }).join("");
+        }
+
+
+        // =====================================
+        // INITIALIZE WEBSITE
+        // =====================================
+
+        function initSite() {
+
+            loadSettings();
+
+            renderProjects();
+
+            renderGames();
+
+            console.log(
+                "CloudberryPiTech website initialized."
+            );
+
+            console.log(
+                "Projects:",
+                getProjectsDatabase()?.length ?? 0
+            );
+
+            console.log(
+                "Games:",
+                getGamesDatabase()?.length ?? 0
+            );
+        }
+
+
+        // Wait for HTML and deferred database scripts.
+        document.addEventListener(
+            "DOMContentLoaded",
+            initSite
+        );
+
     </script>
+
 </body>
 </html>
