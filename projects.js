@@ -19,5 +19,11 @@ window.projectsDB = [
         description: "Book Loader for Kwiddle book reader",
         link: "https://github.com/cloudberrypitech/kwloader",
         tags: ["Python", "Book", "Kindle", "Kwiddle", "Loader"]
+    },
+    {
+        name: "BudgetCalc",
+        description: "A budget calculator for multiple tasks",
+        link: "https://github.com/cloudberrypitech/BudgetCalc",
+        tags: ["Calculator", "Budget", "Expense", "Planning"]
     }
 ];
