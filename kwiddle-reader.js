@@ -230,6 +230,51 @@
    }
   }
   return frag
+
+ function localElements(root,name){return Array.from(root?.getElementsByTagName("*")||[]).filter(el=>el.localName===name)}
+ function readDocumentMeta(doc){
+  const result={};
+  const names=["title","subject","creator","description","date","language","keyword","creation-date"];
+  for(const name of names){
+   const node=localElements(doc,name)[0];
+   if(node){const value=(node.textContent||"").trim();if(value)result[name]=value}
+  }
+  return result;
+ }
+ function pageMasterElements(doc){
+  const masters=localElements(doc,"master-page");
+  const master=masters[0]||null;
+  if(!master)return {master:null,header:null,footer:null,props:null};
+  const layoutName=master.getAttribute("style:page-layout-name");
+  const layouts=localElements(doc,"page-layout");
+  const layout=layouts.find(el=>el.getAttribute("style:name")===layoutName)||layouts[0]||null;
+  const props=layout?Array.from(layout.children).find(el=>el.localName==="page-layout-properties"):null;
+  const header=Array.from(master.children).find(el=>el.localName==="header"||el.localName==="header-left")||null;
+  const footer=Array.from(master.children).find(el=>el.localName==="footer"||el.localName==="footer-left")||null;
+  return {master,header,footer,props};
+ }
+ function applyPageLayout(doc){
+  const page=pageMasterElements(doc);
+  const props=page.props;
+  $("paper").style.width="";
+  $("paper").style.minHeight="";
+  $("paper").style.padding="";
+  $("paper").style.backgroundColor="";
+  if(props){
+   const get=key=>props.getAttribute("fo:"+key)||"";
+   const width=get("page-width"),height=get("page-height");
+   const marginTop=get("margin-top"),marginRight=get("margin-right"),marginBottom=get("margin-bottom"),marginLeft=get("margin-left");
+   const valid=value=>/^\s*\d+(?:\.\d+)?\s*(px|pt|cm|mm|in|%)?\s*$/i.test(value);
+   if(width&&valid(width))$("paper").style.width="min(100%, "+width.trim()+")";
+   if(height&&valid(height))$("paper").style.minHeight=height.trim();
+   if([marginTop,marginRight,marginBottom,marginLeft].some(Boolean)){
+    const values=[marginTop||"2cm",marginRight||"2cm",marginBottom||"2cm",marginLeft||"2cm"];
+    if(values.every(valid))$("paper").style.padding=values.join(" ");
+   }
+   const bg=get("background-color");if(bg&&/^(#[0-9a-f]{3,8}|[a-z]+|rgb[a]?\([0-9,.\s%]+\))$/i.test(bg))$("paper").style.backgroundColor=bg;
+  }
+  return page;
+ }
  } async function openBook(index){
   if(index<0||index>=books.length)return;current=index;renderList();$("prev").disabled=index===0;$("next").disabled=index===books.length-1;
   $("paper").innerHTML='<div class="empty">Opening '+books[index].title+'…</div>';$("fontInfo").textContent="";activeFonts.clear();imageUrls.forEach(URL.revokeObjectURL);imageUrls=[];
@@ -237,10 +282,30 @@
    const response=await fetch(books[index].url,{cache:"no-store",headers:{"Cache-Control":"no-cache"}});if(!response.ok)throw Error("Download failed ("+response.status+")");
    const zip=await JSZip.loadAsync(await response.arrayBuffer());const xmlFile=zip.file("content.xml");if(!xmlFile)throw Error("This ODT has no content.xml file");
    const xml= new DOMParser().parseFromString(await xmlFile.async("text"),"application/xml");if(xml.querySelector("parsererror"))throw Error("Invalid ODT XML");
-   footnotes=[];collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;const contentLists=listStyleRegistry;const contentFonts=fontFaceRegistry;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v);for(const [k,v] of contentLists)if(!listStyleRegistry.has(k))listStyleRegistry.set(k,v);for(const [k,v] of contentFonts)if(!fontFaceRegistry.has(k))fontFaceRegistry.set(k,v)}}
+   footnotes=[];collectStyles(xml);
+   let stylesXml=null;
+   const stylesFile=zip.file("styles.xml");
+   if(stylesFile){
+    stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");
+    if(!stylesXml.querySelector("parsererror")){
+     const contentStyles=styleRegistry,contentDefaults=defaultStyles,contentLists=listStyleRegistry,contentFonts=fontFaceRegistry;
+     collectStyles(stylesXml);
+     for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);
+     for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v);
+     for(const [k,v] of contentLists)if(!listStyleRegistry.has(k))listStyleRegistry.set(k,v);
+     for(const [k,v] of contentFonts)if(!fontFaceRegistry.has(k))fontFaceRegistry.set(k,v);
+    }else stylesXml=null;
+   }
+   const pageInfo=applyPageLayout(stylesXml);
+   const metaFile=zip.file("meta.xml");
+   let documentMeta={};
+   if(metaFile){const metaXml=new DOMParser().parseFromString(await metaFile.async("text"),"application/xml");if(!metaXml.querySelector("parsererror"))documentMeta=readDocumentMeta(metaXml)}
    const body=xml.getElementsByTagName("office:body")[0]?.firstElementChild;if(!body)throw Error("No readable document body found");
-   const content=buildBlocks(body);$("paper").replaceChildren(content);
+   const content=buildBlocks(body);$("paper").replaceChildren();
+   if(pageInfo.header){const header=document.createElement("header");header.className="odt-running-header";header.append(buildBlocks(pageInfo.header));$("paper").append(header)}
+   $("paper").append(content);
    if(footnotes.length){const section=document.createElement("section");section.className="odt-footnotes";const heading=document.createElement("h2");heading.textContent="Notes";section.append(heading,...footnotes);$("paper").append(section)}
+   if(pageInfo.footer){const footer=document.createElement("footer");footer.className="odt-running-footer";footer.append(buildBlocks(pageInfo.footer));$("paper").append(footer)}
    const zipNames=Object.keys(zip.files);
    function findPackageFile(href){
     let decoded=href;try{decoded=decodeURIComponent(href)}catch{}
@@ -261,7 +326,7 @@
    headings.forEach((h,i)=>{if(!h.textContent.trim())return;const item=document.createElement("div");item.className="outline";item.style.paddingLeft=(Number(h.tagName[1])-1)*10+12+"px";item.textContent=h.textContent;item.addEventListener("click",()=>h.scrollIntoView({behavior:"smooth",block:"start"}));$("outline").append(item)});
    const saved=JSON.parse(localStorage.getItem(progressKey)||"{}");const key=books[index].sha;const scroll=saved[key]||0;if(scroll>0)setTimeout(()=>$("paper").scrollTop=scroll,0);
    $("paper").style.setProperty("--reader-size",scale+"px");
-   $("bookMeta").textContent=books[index].title+" · "+(books[index].size/1024).toFixed(1)+" KB · Source: Kwiddle GitHub";
+   const details=[documentMeta.title||books[index].title,documentMeta.creator?"By "+documentMeta.creator:"",documentMeta.subject||"",documentMeta.date||""].filter(Boolean);$("bookMeta").textContent=details.join(" · ")+" · "+(books[index].size/1024).toFixed(1)+" KB · Source: Kwiddle GitHub";
    $("fontInfo").textContent=activeFonts.size?"Document fonts: "+Array.from(activeFonts).join(", "):"No explicit font families declared; reader uses its default Literata typeface.";
    $("paper").dataset.bookSha=key;
    $("paper").onscroll=()=>{const data=JSON.parse(localStorage.getItem(progressKey)||"{}");data[key]=$("paper").scrollTop;localStorage.setItem(progressKey,JSON.stringify(data))};
