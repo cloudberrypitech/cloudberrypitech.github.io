@@ -4,7 +4,7 @@
  const API=`https://api.github.com/repos/${OWNER}/${REPO}/contents/${BOOK_DIR}?ref=${BRANCH}`;
  const RAW=`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/`;
  const $=id=>document.getElementById(id);
- let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[],styleRegistry=new Map(),defaultStyles=new Map(),listStyleRegistry=new Map(),footnotes=[];
+ let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[],styleRegistry=new Map(),defaultStyles=new Map(),listStyleRegistry=new Map(),fontFaceRegistry=new Map(),footnotes=[];
  const progressKey="kwiddle-reader-progress-v1";
  function cookieValue(name){const prefix=encodeURIComponent(name)+"=";const item=document.cookie.split("; ").find(part=>part.startsWith(prefix));return item?decodeURIComponent(item.slice(prefix.length)):null}
  function syncSiteTheme(){
@@ -39,10 +39,15 @@
  function xmlText(node){return Array.from(node.childNodes).map(n=>n.nodeType===3?n.nodeValue:n.nodeType===1?xmlText(n):"").join("")}
  function styleKey(family,name){return family+":"+name}
  function collectStyles(doc){
-  styleRegistry=new Map();defaultStyles=new Map();listStyleRegistry=new Map();
+  styleRegistry=new Map();defaultStyles=new Map();listStyleRegistry=new Map();fontFaceRegistry=new Map();
   if(!doc)return;
   const all=Array.from(doc.getElementsByTagName("*"));
   for(const el of all){
+   if(el.localName==="font-face"){
+    const name=el.getAttribute("style:name");
+    const family=el.getAttribute("svg:font-family")||el.getAttribute("style:font-family");
+    if(name&&family)fontFaceRegistry.set(name,family.replace(/^["']|["']$/g,""));
+   }
    if(el.localName==="list-style"){
     const name=el.getAttribute("style:name");
     if(name)listStyleRegistry.set(name,el);
@@ -79,7 +84,7 @@
   const underline=props.getAttribute("style:text-underline-style");if(underline&&underline!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" underline";
   const strike=props.getAttribute("style:text-line-through-style");if(strike&&strike!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" line-through";
   const bg=props.getAttribute("fo:background-color");if(bg==="transparent")delete out["background-color"];
-  const familyName=props.getAttribute("style:font-name");if(familyName){out["font-family"]=familyName;activeFonts.add(familyName)}
+  const familyName=props.getAttribute("style:font-name");if(familyName){const resolved=fontFaceRegistry.get(familyName)||familyName;out["font-family"]=resolved.includes(",")?resolved:'"'+resolved.replace(/"/g,"\\\\\"")+'"';activeFonts.add(resolved)}
   const textTransform=props.getAttribute("fo:text-transform");if(textTransform)out["text-transform"]=textTransform;
   if(family==="table-cell"){copy("fo:background-color","background-color");copy("style:vertical-align","vertical-align")}
   return out;
@@ -227,7 +232,7 @@
    const response=await fetch(books[index].url,{cache:"no-store",headers:{"Cache-Control":"no-cache"}});if(!response.ok)throw Error("Download failed ("+response.status+")");
    const zip=await JSZip.loadAsync(await response.arrayBuffer());const xmlFile=zip.file("content.xml");if(!xmlFile)throw Error("This ODT has no content.xml file");
    const xml= new DOMParser().parseFromString(await xmlFile.async("text"),"application/xml");if(xml.querySelector("parsererror"))throw Error("Invalid ODT XML");
-   footnotes=[];collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;const contentLists=listStyleRegistry;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v);for(const [k,v] of contentLists)if(!listStyleRegistry.has(k))listStyleRegistry.set(k,v)}}
+   footnotes=[];collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;const contentLists=listStyleRegistry;const contentFonts=fontFaceRegistry;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v);for(const [k,v] of contentLists)if(!listStyleRegistry.has(k))listStyleRegistry.set(k,v);for(const [k,v] of contentFonts)if(!fontFaceRegistry.has(k))fontFaceRegistry.set(k,v)}}
    const body=xml.getElementsByTagName("office:body")[0]?.firstElementChild;if(!body)throw Error("No readable document body found");
    const content=buildBlocks(body);$("paper").replaceChildren(content);
    if(footnotes.length){const section=document.createElement("section");section.className="odt-footnotes";const heading=document.createElement("h2");heading.textContent="Notes";section.append(heading,...footnotes);$("paper").append(section)}
