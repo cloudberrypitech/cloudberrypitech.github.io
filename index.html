@@ -410,7 +410,8 @@
             const facts = [
                 ["★", project.stars, "stars"],
                 ["⑂", project.forks, "forks"],
-                ["◉", project.openIssues, "open issues"],
+                ["◉", project.watchers, "watchers"],
+                ["◎", project.openIssues, "open issues"],
                 ["◷", project.updated ? new Date(project.updated).toLocaleDateString() : "", "updated"]
             ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
             if (facts.length) {
@@ -527,6 +528,7 @@
             return {
                 name: repo.name,
                 description: repo.description || "",
+                language: repo.language || "",
                 link: repo.html_url,
                 readme: readmePath,
                 homepage: repo.homepage,
