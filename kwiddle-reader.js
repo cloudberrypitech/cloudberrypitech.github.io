@@ -6,6 +6,15 @@
  const $=id=>document.getElementById(id);
  let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[];
  const progressKey="kwiddle-reader-progress-v1";
+ function cookieValue(name){const prefix=encodeURIComponent(name)+"=";const item=document.cookie.split("; ").find(part=>part.startsWith(prefix));return item?decodeURIComponent(item.slice(prefix.length)):null}
+ function syncSiteTheme(){
+  const theme=cookieValue("theme")==="light"?"light":"dark";
+  const accent=cookieValue("accent");
+  document.documentElement.dataset.theme=theme;
+  if(accent&&/^#[0-9a-f]{6}$/i.test(accent))document.documentElement.style.setProperty("--accent",accent);
+  $("theme").value=theme;
+ }
+ syncSiteTheme();
  function safeName(path){return path.split("/").pop().replace(/\.odt$/i,"").replace(/[_-]+/g," ").replace(/\b\w/g,c=>c.toUpperCase())}
  function setStatus(s){$("syncStatus").textContent=s}
  async function loadBooks(keep=true){
@@ -68,9 +77,10 @@
     for(const item of n.children){if(item.localName!=="list-item")continue;const li=document.createElement("li");li.append(buildBlocks(item));list.append(li)}frag.append(list);
    }else if(tag==="table"){
     const table=document.createElement("table"),body=document.createElement("tbody");
-    for(const row of n.querySelectorAll(":scope > table\:table-row, :scope > table\:table-header-rows > table\:table-row")){
+    const rows=Array.from(n.children).flatMap(child=>child.localName==="table-header-rows"||child.localName==="table-rows"?Array.from(child.children).filter(row=>row.localName==="table-row"):(child.localName==="table-row"?[child]:[]));
+    for(const row of rows){
      const tr=document.createElement("tr");
-     for(const cell of row.children){if(!["table-cell","covered-table-cell"].includes(cell.localName))continue;const td=document.createElement("td");td.append(buildBlocks(cell));const span=cell.getAttribute("table:number-columns-spanned");if(span)td.colSpan=Math.max(1,Number(span));tr.append(td)}body.append(tr)
+     for(const cell of row.children){if(!["table-cell","covered-table-cell"].includes(cell.localName))continue;const td=document.createElement("td");td.append(buildBlocks(cell));const span=cell.getAttribute("table:number-columns-spanned");if(span)td.colSpan=Math.max(1,Number(span));const rowSpan=cell.getAttribute("table:number-rows-spanned");if(rowSpan)td.rowSpan=Math.max(1,Number(rowSpan));tr.append(td)}body.append(tr)
     }table.append(body);frag.append(table);
    }else if(tag==="frame"){
     const img=n.querySelector("image");if(img){const src=img.getAttribute("xlink:href");if(src){const image=document.createElement("img");image.alt=n.getAttribute("draw:name")||"Document image";image.dataset.odtPath=src;frag.append(image)}}
@@ -93,7 +103,7 @@
    const headings=Array.from($("paper").querySelectorAll("h1,h2,h3,h4,h5,h6"));$("outline").replaceChildren();
    if(!headings.length)$("outline").textContent="No headings in this book.";
    headings.forEach((h,i)=>{if(!h.textContent.trim())return;const item=document.createElement("div");item.className="outline";item.style.paddingLeft=(Number(h.tagName[1])-1)*10+12+"px";item.textContent=h.textContent;item.addEventListener("click",()=>h.scrollIntoView({behavior:"smooth",block:"start"}));$("outline").append(item)});
-   const saved=JSON.parse(localStorage.getItem(progressKey)||"{}");const key=books[index].sha;const scroll=saved[key]||0;if(scroll>0)setTimeout(()=>$("paper").scrollIntoView(),0);
+   const saved=JSON.parse(localStorage.getItem(progressKey)||"{}");const key=books[index].sha;const scroll=saved[key]||0;if(scroll>0)setTimeout(()=>$("paper").scrollTop=scroll,0);
    $("paper").style.setProperty("--reader-size",scale+"px");
    $("bookMeta").textContent=books[index].title+" · "+(books[index].size/1024).toFixed(1)+" KB · Source: Kwiddle GitHub";
    $("fontInfo").textContent=activeFonts.size?"Document fonts: "+Array.from(activeFonts).join(", "):"No explicit font families declared; reader uses its default Literata typeface.";
@@ -103,7 +113,7 @@
  }
  function changeSize(delta){scale=Math.max(12,Math.min(28,scale+delta));$("paper").style.setProperty("--reader-size",scale+"px")}
  function find(){const q=$("find").value.trim();if(!q)return;const walker=document.createTreeWalker($("paper"),NodeFilter.SHOW_TEXT);const ranges=[];let node;while(node=walker.nextNode()){let at=0,txt=node.nodeValue.toLowerCase();while((at=txt.indexOf(q.toLowerCase(),at))!==-1){const r=document.createRange();r.setStart(node,at);r.setEnd(node,at+q.length);ranges.push(r);at+=q.length}}searchMatches=ranges;matchIndex=0;if(ranges.length){const r=ranges[0];const mark=document.createElement("mark");r.surroundContents(mark);mark.scrollIntoView({behavior:"smooth",block:"center"})}else alert("No matches found in this book.")}
- $("refresh").addEventListener("click",()=>loadBooks(true));$("bookSearch").addEventListener("input",renderList);$("prev").addEventListener("click",()=>openBook(current-1));$("next").addEventListener("click",()=>openBook(current+1));$("smaller").addEventListener("click",()=>changeSize(-1));$("larger").addEventListener("click",()=>changeSize(1));$("findNext").addEventListener("click",find);$("find").addEventListener("keydown",e=>{if(e.key==="Enter")find()});$("fonts").addEventListener("click",()=>$("fontInfo").scrollIntoView({behavior:"smooth"}));$("print").addEventListener("click",()=>window.print());$("theme").addEventListener("change",e=>document.documentElement.dataset.theme=e.target.value);$("toggleBooks").addEventListener("click",()=>$("sidebar").classList.toggle("collapsed"));
+ $("refresh").addEventListener("click",()=>loadBooks(true));$("bookSearch").addEventListener("input",renderList);$("prev").addEventListener("click",()=>openBook(current-1));$("next").addEventListener("click",()=>openBook(current+1));$("smaller").addEventListener("click",()=>changeSize(-1));$("larger").addEventListener("click",()=>changeSize(1));$("findNext").addEventListener("click",find);$("find").addEventListener("keydown",e=>{if(e.key==="Enter")find()});$("fonts").addEventListener("click",()=>$("fontInfo").scrollIntoView({behavior:"smooth"}));$("print").addEventListener("click",()=>window.print());$("theme").addEventListener("change",e=>{document.documentElement.dataset.theme=e.target.value;document.cookie="theme="+encodeURIComponent(e.target.value)+"; path=/; max-age=31536000; SameSite=Lax"});$("readingTheme").addEventListener("change",e=>{if(e.target.value==="sepia")document.documentElement.dataset.reading="sepia";else delete document.documentElement.dataset.reading});$("toggleBooks").addEventListener("click",()=>$("sidebar").classList.toggle("collapsed"));
  document.addEventListener("keydown",e=>{if(e.target.matches("input,textarea,select"))return;if(e.key==="ArrowLeft"&&current>0)openBook(current-1);if(e.key==="ArrowRight"&&current<books.length-1)openBook(current+1);if(e.key==="+"||e.key==="=")changeSize(1);if(e.key==="-")changeSize(-1);if(e.key==="/" ){e.preventDefault();$("find").focus()}});
  loadBooks(false);setInterval(()=>loadBooks(true),5*60*1000);
 })();
