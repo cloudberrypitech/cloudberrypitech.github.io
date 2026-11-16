@@ -20,10 +20,10 @@
  async function loadBooks(keep=true){
   const old=current>=0?books[current]?.name:null;setStatus("Checking Kwiddle repository…");
   try{
-   const response=await fetch(API,{cache:"no-store",headers:{"Accept":"application/vnd.github+json"}});
+   const response=await fetch(API+(API.includes("?")?"&":"?")+"_="+Date.now(),{cache:"no-store",headers:{"Accept":"application/vnd.github+json","Cache-Control":"no-cache"}});
    if(!response.ok)throw Error("GitHub returned "+response.status);
    const data=await response.json();
-   books=data.filter(x=>x.type==="file"&&x.name.toLowerCase().endsWith(".odt")&&!x.name.startsWith(".~")).map(x=>({name:x.name,title:safeName(x.name),url:x.download_url||RAW+BOOK_DIR+"/"+encodeURIComponent(x.name),size:x.size,sha:x.sha})).sort((a,b)=>a.title.localeCompare(b.title));
+   books=data.filter(x=>x.type==="file"&&x.name.toLowerCase().endsWith(".odt")&&!x.name.startsWith(".~")).map(x=>({name:x.name,title:safeName(x.name),url:RAW+BOOK_DIR+"/"+encodeURIComponent(x.name)+"?v="+encodeURIComponent(x.sha),size:x.size,sha:x.sha})).sort((a,b)=>a.title.localeCompare(b.title));
    renderList();$("count").textContent="("+books.length+")";
    setStatus("Synced from "+OWNER+"/"+REPO+" · "+new Date().toLocaleTimeString());
    if(keep&&old){const n=books.findIndex(b=>b.name===old);if(n>=0){await openBook(n);return}}
@@ -94,7 +94,7 @@
   if(index<0||index>=books.length)return;current=index;renderList();$("prev").disabled=index===0;$("next").disabled=index===books.length-1;
   $("paper").innerHTML='<div class="empty">Opening '+books[index].title+'…</div>';$("fontInfo").textContent="";activeFonts.clear();imageUrls.forEach(URL.revokeObjectURL);imageUrls=[];
   try{
-   const response=await fetch(books[index].url);if(!response.ok)throw Error("Download failed ("+response.status+")");
+   const response=await fetch(books[index].url,{cache:"no-store",headers:{"Cache-Control":"no-cache"}});if(!response.ok)throw Error("Download failed ("+response.status+")");
    const zip=await JSZip.loadAsync(await response.arrayBuffer());const xmlFile=zip.file("content.xml");if(!xmlFile)throw Error("This ODT has no content.xml file");
    const xml= new DOMParser().parseFromString(await xmlFile.async("text"),"application/xml");if(xml.querySelector("parsererror"))throw Error("Invalid ODT XML");
    const body=xml.getElementsByTagName("office:body")[0]?.firstElementChild;if(!body)throw Error("No readable document body found");
