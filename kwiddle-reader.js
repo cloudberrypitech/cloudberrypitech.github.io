@@ -175,6 +175,16 @@
   }
   return frag
  }
+ function listNumber(value,format){
+  if(format==="a"||format==="A"){
+   let n=value,result="";while(n>0){n--;result=String.fromCharCode((format==="a"?97:65)+(n%26))+result;n=Math.floor(n/26)}return result;
+  }
+  if(format==="i"||format==="I"){
+   let n=value,result="";for(const [amount,symbol] of [[1000,"M"],[900,"CM"],[500,"D"],[400,"CD"],[100,"C"],[90,"XC"],[50,"L"],[40,"XL"],[10,"X"],[9,"IX"],[5,"V"],[4,"IV"],[1,"I"]]){while(n>=amount){result+=symbol;n-=amount}}
+   return format==="i"?result.toLowerCase():result;
+  }
+  return String(value);
+ }
  function appendBlockStyle(el,node,family){applyElementStyle(el,node,family);const align=el.style.textAlign;if(align)el.dataset.align=align}
  function buildBlocks(root){
   const frag=document.createDocumentFragment();
@@ -193,13 +203,31 @@
     const numbered=definition?definition.localName==="list-level-style-number":styleName.toLowerCase().includes("number");
     const list=document.createElement(numbered?"ol":"ul");
     if(styleName)list.dataset.odtStyle=styleName;
-    if(numbered&&definition){
-     const fmt=definition.getAttribute("style:num-format")||"1";
+    const fmt=definition?.getAttribute("style:num-format")||"1";
+    const prefix=definition?.getAttribute("style:num-prefix")||"";
+    const suffix=definition?.getAttribute("style:num-suffix")||".";
+    const startValue=Math.max(1,Number(definition?.getAttribute("text:start-value")||1)||1);
+    const bulletChar=definition?.getAttribute("text:bullet-char")||"";
+    const bulletHref=definition?.getAttribute("xlink:href")||"";
+    const customMarker=numbered&&(prefix||suffix!=="."||!["1","a","A","i","I"].includes(fmt));
+    if(numbered){
      const typeMap={"1":"decimal","a":"lower-alpha","A":"upper-alpha","i":"lower-roman","I":"upper-roman"};
-     if(typeMap[fmt])list.style.listStyleType=typeMap[fmt];
-     const start=Number(definition.getAttribute("text:start-value"));if(Number.isFinite(start)&&start>1)list.start=start;
+     list.style.listStyleType=customMarker?"none":(typeMap[fmt]||"decimal");
+     if(!customMarker&&startValue>1)list.start=startValue;
+    }else if(bulletChar||bulletHref)list.style.listStyleType="none";
+    let itemIndex=0;
+    for(const item of n.children){
+     if(item.localName!=="list-item"&&item.localName!=="list-header")continue;
+     const li=document.createElement("li");
+     if(customMarker){
+      const mark=document.createElement("span");mark.className="odt-list-marker";mark.textContent=prefix+listNumber(startValue+itemIndex,fmt)+suffix+" ";li.append(mark);
+     }else if(!numbered&&(bulletChar||bulletHref)){
+      const mark=document.createElement("span");mark.className="odt-list-marker";
+      if(bulletHref){const img=document.createElement("img");img.dataset.odtPath=bulletHref;img.alt="";mark.append(img)}else mark.textContent=bulletChar+" ";
+      li.append(mark);
+     }
+     li.append(buildBlocks(item));list.append(li);itemIndex++;
     }
-    for(const item of n.children){if(item.localName!=="list-item"&&item.localName!=="list-header")continue;const li=document.createElement("li");li.append(buildBlocks(item));list.append(li)}
     frag.append(list);
    }else if(tag==="table"){
     const table=document.createElement("table");applyElementStyle(table,n,"table");
