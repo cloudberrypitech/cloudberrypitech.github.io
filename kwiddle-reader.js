@@ -282,8 +282,8 @@
   const layouts=localElements(doc,"page-layout");
   const layout=layouts.find(el=>el.getAttribute("style:name")===layoutName)||layouts[0]||null;
   const props=layout?Array.from(layout.children).find(el=>el.localName==="page-layout-properties"):null;
-  const header=Array.from(master.children).find(el=>el.localName==="header"||el.localName==="header-left")||null;
-  const footer=Array.from(master.children).find(el=>el.localName==="footer"||el.localName==="footer-left")||null;
+  const header=Array.from(master.children).find(el=>["header","header-left","header-first"].includes(el.localName))||null;
+  const footer=Array.from(master.children).find(el=>["footer","footer-left","footer-first"].includes(el.localName))||null;
   return {master,header,footer,props};
  }
  function applyPageLayout(doc){
