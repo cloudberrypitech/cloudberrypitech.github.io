@@ -84,7 +84,7 @@
   const underline=props.getAttribute("style:text-underline-style");if(underline&&underline!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" underline";
   const strike=props.getAttribute("style:text-line-through-style");if(strike&&strike!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" line-through";
   const bg=props.getAttribute("fo:background-color");if(bg==="transparent")delete out["background-color"];
-  const familyName=props.getAttribute("style:font-name");if(familyName){const resolved=fontFaceRegistry.get(familyName)||familyName;out["font-family"]=resolved.includes(",")?resolved:'"'+resolved.replace(/"/g,"\\\\\"")+'"';activeFonts.add(resolved)}
+  const familyName=props.getAttribute("style:font-name");if(familyName){const resolved=fontFaceRegistry.get(familyName)||familyName;out["font-family"]=resolved.includes(",")?resolved:JSON.stringify(resolved);activeFonts.add(resolved)}
   const textTransform=props.getAttribute("fo:text-transform");if(textTransform)out["text-transform"]=textTransform;
   if(family==="table-cell"){copy("fo:background-color","background-color");copy("style:vertical-align","vertical-align")}
   return out;
