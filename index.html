@@ -394,6 +394,17 @@
 
             card.append(tags, title, description);
 
+            if (Number.isFinite(project.stars) || Number.isFinite(project.forks) || project.updated) {
+                const details = document.createElement("p");
+                details.className = "muted mono mb-5 text-xs";
+                const bits = [];
+                if (Number.isFinite(project.stars)) bits.push(`★ ${project.stars}`);
+                if (Number.isFinite(project.forks)) bits.push(`⑂ ${project.forks}`);
+                if (project.updated) bits.push(`Updated ${new Date(project.updated).toLocaleDateString()}`);
+                details.textContent = bits.join(" · ");
+                card.appendChild(details);
+            }
+
             const link = safeLink(project.link);
             if (link) {
                 const anchor = document.createElement("a");
@@ -444,33 +455,72 @@
             return card;
         }
 
-        function renderProjects() {
+        async function fetchGitHubProjects() {
+            const repositories = [];
+            for (let page = 1; page <= 10; page += 1) {
+                const response = await fetch(
+                    `https://api.github.com/users/cloudberrypitech/repos?type=owner&sort=updated&per_page=100&page=${page}`,
+                    { cache: "no-store", headers: { Accept: "application/vnd.github+json" } }
+                );
+                if (!response.ok) throw new Error(`GitHub API returned ${response.status}`);
+                const batch = await response.json();
+                if (!Array.isArray(batch)) throw new Error("Unexpected GitHub API response");
+                repositories.push(...batch.filter(repo => repo && !repo.fork));
+                if (batch.length < 100) break;
+            }
+            return repositories;
+        }
+
+        async function renderProjects() {
             const grid = document.getElementById("projects-grid");
             const status = document.getElementById("projects-status");
-            const data = getProjectsDatabase();
-
+            const count = document.getElementById("project-count");
             grid.replaceChildren();
+            status.textContent = "Syncing GitHub repositories…";
 
-            if (!data) {
-                status.textContent = "Could not load projects.js";
-                const message = document.createElement("p");
-                message.className = "glass rounded-2xl p-6 text-sm text-red-400";
-                message.textContent = "projects.js could not be loaded. Check that the file exists beside index.html and contains a projectsDB array.";
-                grid.appendChild(message);
-                document.getElementById("project-count").textContent = "0";
-                return;
+            let data;
+            try {
+                data = await fetchGitHubProjects();
+                data.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+                status.textContent = `${data.length} public repositories · synced from GitHub`;
+            } catch (error) {
+                data = getProjectsDatabase();
+                status.textContent = data
+                    ? "GitHub sync unavailable · showing saved projects"
+                    : "Could not load GitHub projects";
+                if (!data) {
+                    const message = document.createElement("p");
+                    message.className = "glass rounded-2xl p-6 text-sm text-red-400";
+                    message.textContent = "GitHub projects could not be loaded. Please refresh later.";
+                    grid.appendChild(message);
+                    count.textContent = "0";
+                    return;
+                }
             }
 
-            data.filter(item => item && typeof item === "object").forEach(project => {
+            data.filter(item => item && typeof item === "object").forEach(repo => {
+                const project = repo.html_url ? {
+                    name: repo.name,
+                    description: repo.description || "No description provided.",
+                    link: repo.html_url,
+                    tags: [
+                        ...(repo.language ? [repo.language] : []),
+                        ...(Array.isArray(repo.topics) ? repo.topics.slice(0, 4) : []),
+                        ...(repo.archived ? ["Archived"] : [])
+                    ],
+                    stars: repo.stargazers_count,
+                    forks: repo.forks_count,
+                    updated: repo.updated_at,
+                    archived: repo.archived
+                } : repo;
                 grid.appendChild(createProjectCard(project));
             });
 
-            document.getElementById("project-count").textContent = String(data.length);
-            status.textContent = `${data.length} project${data.length === 1 ? "" : "s"}`;
+            count.textContent = String(data.length);
             if (data.length === 0) {
                 const empty = document.createElement("p");
                 empty.className = "glass rounded-2xl p-6 muted text-sm";
-                empty.textContent = "No projects have been added yet. Add one to projects.js.";
+                empty.textContent = "No public, non-fork repositories were found for this account.";
                 grid.appendChild(empty);
             }
         }
@@ -511,16 +561,15 @@
             document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 
             const [projectsLoaded, gamesLoaded] = await Promise.all([
-                loadDataScript("projects.js"),
+                loadDataScript("projects.js?v=6"),
                 loadDataScript("games.js")
             ]);
 
-            renderProjects();
+            await renderProjects();
             renderGames();
+            // Keep the portfolio in sync while the page remains open.
+            window.setInterval(renderProjects, 15 * 60 * 1000);
 
-            if (!projectsLoaded) {
-                document.getElementById("projects-status").textContent = "projects.js request failed";
-            }
             if (!gamesLoaded) {
                 document.getElementById("games-status").textContent = "games.js request failed";
             }
