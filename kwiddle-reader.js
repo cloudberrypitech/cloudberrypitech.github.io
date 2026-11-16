@@ -133,7 +133,10 @@
   const object=frame.querySelector("object,object-ole,plugin");
   const href=object?.getAttribute("xlink:href");
   if(href){
-   const link=document.createElement("a");link.textContent=frame.getAttribute("draw:name")||"Open embedded object";link.dataset.odtObjectPath=href;link.className="odt-object-link";frag.append(link);
+   const label=frame.getAttribute("draw:name")||"Embedded object";
+   const base=href.split("/").pop().replace(/^\.\//,"");
+   const preview=document.createElement("img");preview.dataset.odtPath="ObjectReplacements/"+base;preview.alt=label+" preview";preview.className="odt-framed-image";frag.append(preview);
+   const link=document.createElement("a");link.textContent="Open "+label;link.dataset.odtObjectPath=href;link.className="odt-object-link";frag.append(link);
   }
   const shapeText=Array.from(frame.querySelectorAll("p,h")).map(el=>el.textContent).join(" ").trim();
   if(shapeText){const shape=document.createElement("span");shape.className="odt-shape-text";shape.textContent=shapeText;applyElementStyle(shape,frame,"graphic");frag.append(shape)}
@@ -337,6 +340,17 @@
    if(footnotes.length){const section=document.createElement("section");section.className="odt-footnotes";const heading=document.createElement("h2");heading.textContent="Notes";section.append(heading,...footnotes);$("paper").append(section)}
    if(pageInfo.footer){const footer=document.createElement("footer");footer.className="odt-running-footer";footer.append(buildBlocks(pageInfo.footer));$("paper").append(footer)}
    const zipNames=Object.keys(zip.files);
+   const mediaTypes=new Map();
+   const manifestFile=zip.file("META-INF/manifest.xml");
+   if(manifestFile){
+    const manifestXml=new DOMParser().parseFromString(await manifestFile.async("text"),"application/xml");
+    if(!manifestXml.querySelector("parsererror")){
+     for(const entry of Array.from(manifestXml.getElementsByTagName("*")).filter(el=>el.localName==="file-entry")){
+      const path=entry.getAttribute("manifest:full-path"),type=entry.getAttribute("manifest:media-type");
+      if(path&&type)mediaTypes.set(path.replace(/^\.\//,""),type);
+     }
+    }
+   }
    function findPackageFile(href){
     let decoded=href;try{decoded=decodeURIComponent(href)}catch{}
     decoded=decoded.split("#")[0].split("?")[0].replace(/^\/+/,"");
@@ -345,11 +359,14 @@
     const pieces=[];for(const part of normalized.split("/")){if(!part||part===".")continue;if(part==="..")pieces.pop();else pieces.push(part)}
     normalized=pieces.join("/");
     candidates.push(normalized);
-    const base=normalized.split("/").pop();if(base)candidates.push("Pictures/"+base,base);
+    const base=normalized.split("/").pop();if(base){
+     candidates.push("Pictures/"+base,base,"ObjectReplacements/"+base);
+     for(const ext of [".svg",".png",".jpg",".jpeg",".gif",".webp",".bmp"])candidates.push("ObjectReplacements/"+base+ext);
+    }
     for(const candidate of candidates){const file=zip.file(candidate);if(file&&!file.dir)return file}
     const match=zipNames.find(name=>!zip.files[name].dir&&base&&name.endsWith("/"+base));return match?zip.file(match):null
    }
-   for(const img of $("paper").querySelectorAll("img[data-odt-path]")){const file=findPackageFile(img.dataset.odtPath);if(file){const blob=await file.async("blob");const url=URL.createObjectURL(blob);imageUrls.push(url);img.src=url;img.addEventListener("error",()=>{img.alt="Could not display embedded image: "+(img.alt||"image")},{once:true})}else{img.replaceWith(document.createTextNode("["+img.alt+" unavailable in this ODT package]"))}}
+   for(const img of $("paper").querySelectorAll("img[data-odt-path]")){const file=findPackageFile(img.dataset.odtPath);if(file){const blob=await file.async("blob");const name=file.name||img.dataset.odtPath;const mime=mediaTypes.get(name)||mediaTypes.get(name.replace(/^\.\//,""))||({svg:"image/svg+xml",svgz:"image/svg+xml",png:"image/png",jpg:"image/jpeg",jpeg:"image/jpeg",gif:"image/gif",webp:"image/webp",bmp:"image/bmp"}[name.split(".").pop().toLowerCase()])||"application/octet-stream";const typed=blob.type?blob:new Blob([blob],{type:mime});const url=URL.createObjectURL(typed);imageUrls.push(url);img.src=url;img.addEventListener("error",()=>{img.alt="Could not display embedded image: "+(img.alt||"image")},{once:true})}else{img.replaceWith(document.createTextNode("["+img.alt+" unavailable in this ODT package]"))}}
    for(const link of $("paper").querySelectorAll("a[data-odt-object-path]")){const file=findPackageFile(link.dataset.odtObjectPath);if(file){const blob=await file.async("blob");const url=URL.createObjectURL(blob);imageUrls.push(url);link.href=url;link.target="_blank";link.rel="noopener noreferrer"}else link.replaceWith(document.createTextNode("[Embedded object unavailable]"))}
    const headings=Array.from($("paper").querySelectorAll("h1,h2,h3,h4,h5,h6"));$("outline").replaceChildren();
    if(!headings.length)$("outline").textContent="No headings in this book.";
