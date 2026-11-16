@@ -222,6 +222,8 @@
     const textContent=Array.from(n.querySelectorAll("p,h")).map(p=>p.textContent).join(" ").trim();
     if(textContent){const label=document.createElement("figcaption");label.textContent=textContent;shape.append(label)}
     frag.append(shape);
+   }else if(tag==="g"){
+    frag.append(buildBlocks(n));
    }else if(tag==="image"){
     const src=n.getAttribute("xlink:href");if(src){const image=document.createElement("img");image.alt="Document image";image.dataset.odtPath=src;applyElementStyle(image,n,"graphic");frag.append(image)}
    }else if(["section","div","list-item","list-header","table-cell","table-row"].includes(tag)){frag.append(buildBlocks(n))}
