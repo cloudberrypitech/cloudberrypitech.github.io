@@ -189,7 +189,20 @@
                     <h2 class="text-3xl font-bold sm:text-4xl">Portfolio</h2>
                     <p class="muted mt-2">Selected works and open-source tools.</p>
                 </div>
-                <span id="projects-status" class="muted mono text-xs" role="status" aria-live="polite">Loading projects…</span>
+                <div class="flex flex-wrap items-center gap-2">
+                    <span id="projects-status" class="muted mono text-xs" role="status" aria-live="polite">Loading projects…</span>
+                    <button id="refresh-projects" type="button" class="glass rounded-xl px-3 py-2 text-xs font-bold transition hover:opacity-80">↻ Refresh</button>
+                </div>
+            </div>
+
+            <div class="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-[1fr_auto]">
+                <input id="project-search" type="search" placeholder="Search repositories, descriptions, languages or topics…" aria-label="Search GitHub projects" class="glass min-w-0 rounded-xl px-4 py-3 text-sm text-inherit outline-none focus:border-[var(--accent)]">
+                <select id="project-sort" aria-label="Sort projects" class="glass rounded-xl px-4 py-3 text-sm text-inherit">
+                    <option value="updated">Recently updated</option>
+                    <option value="created">Recently created</option>
+                    <option value="stars">Most stars</option>
+                    <option value="name">Name A–Z</option>
+                </select>
             </div>
 
             <div id="projects-grid" class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
@@ -386,28 +399,63 @@
 
             const title = document.createElement("h3");
             title.className = "mb-2 text-xl font-bold";
-            title.textContent = project.name || "Untitled project";
+            title.textContent = project.name || "Untitled repository";
 
             const description = document.createElement("p");
-            description.className = "muted mb-6 flex-1 text-sm leading-relaxed";
-            description.textContent = project.description || "No description provided.";
+            description.className = "muted mb-5 flex-1 text-sm leading-relaxed";
+            description.textContent = project.description || "No GitHub description has been added yet.";
 
             card.append(tags, title, description);
 
-            const link = safeLink(project.link);
-            if (link) {
-                const anchor = document.createElement("a");
-                anchor.href = link;
-                anchor.target = "_blank";
-                anchor.rel = "noopener noreferrer";
-                anchor.className = "accent-text inline-flex items-center gap-2 text-sm font-bold transition-all hover:gap-3";
-                anchor.append(document.createTextNode("Explore Project "));
-                const arrow = document.createElement("span");
-                arrow.textContent = "→";
-                anchor.appendChild(arrow);
-                card.appendChild(anchor);
+            const facts = [
+                ["★", project.stars, "stars"],
+                ["⑂", project.forks, "forks"],
+                ["◉", project.watchers, "watchers"],
+                ["◎", project.openIssues, "open issues"],
+                ["◷", project.updated ? new Date(project.updated).toLocaleDateString() : "", "updated"]
+            ].filter(item => item[1] !== undefined && item[1] !== null && item[1] !== "");
+            if (facts.length) {
+                const details = document.createElement("p");
+                details.className = "muted mono mb-4 text-xs leading-6";
+                details.textContent = facts.map(([icon, value, label]) => `${icon} ${value} ${label}`).join("  ·  ");
+                card.appendChild(details);
             }
 
+            const metadata = document.createElement("div");
+            metadata.className = "muted mb-5 space-y-1 text-xs";
+            const metaItems = [
+                project.license ? `License: ${project.license}` : "",
+                project.defaultBranch ? `Branch: ${project.defaultBranch}` : "",
+                Number.isFinite(project.size) ? `Size: ${project.size.toLocaleString()} KB` : "",
+                project.created ? `Created: ${new Date(project.created).toLocaleDateString()}` : "",
+                project.pushed ? `Last push: ${new Date(project.pushed).toLocaleDateString()}` : ""
+            ].filter(Boolean);
+            metaItems.forEach(value => {
+                const line = document.createElement("p");
+                line.textContent = value;
+                metadata.appendChild(line);
+            });
+            if (metaItems.length) card.appendChild(metadata);
+
+            const links = document.createElement("div");
+            links.className = "mt-auto flex flex-wrap gap-3";
+            const addLink = (label, value, prominent = false) => {
+                const href = safeLink(value);
+                if (!href) return;
+                const anchor = document.createElement("a");
+                anchor.href = href;
+                anchor.target = "_blank";
+                anchor.rel = "noopener noreferrer";
+                anchor.className = prominent
+                    ? "accent-bg rounded-xl px-4 py-2.5 text-sm font-bold text-white transition hover:opacity-90"
+                    : "accent-text inline-flex items-center rounded-xl px-3 py-2 text-sm font-semibold transition hover:opacity-75";
+                anchor.textContent = label;
+                links.appendChild(anchor);
+            };
+            addLink("Open repository ↗", project.link, true);
+            addLink("README", project.readme);
+            addLink("Live website ↗", project.homepage);
+            if (links.childElementCount) card.appendChild(links);
             return card;
         }
 
@@ -444,34 +492,131 @@
             return card;
         }
 
-        function renderProjects() {
-            const grid = document.getElementById("projects-grid");
-            const status = document.getElementById("projects-status");
-            const data = getProjectsDatabase();
+        let githubProjects = [];
+        let projectRefreshInProgress = false;
 
-            grid.replaceChildren();
-
-            if (!data) {
-                status.textContent = "Could not load projects.js";
-                const message = document.createElement("p");
-                message.className = "glass rounded-2xl p-6 text-sm text-red-400";
-                message.textContent = "projects.js could not be loaded. Check that the file exists beside index.html and contains a projectsDB array.";
-                grid.appendChild(message);
-                document.getElementById("project-count").textContent = "0";
-                return;
+        async function fetchGitHubProjects() {
+            const repositories = [];
+            for (let page = 1; page <= 100; page += 1) {
+                const response = await fetch(
+                    `https://api.github.com/users/cloudberrypitech/repos?type=owner&sort=updated&per_page=100&page=${page}`,
+                    { cache: "no-store", headers: { Accept: "application/vnd.github+json" } }
+                );
+                if (!response.ok) {
+                    const detail = response.status === 403
+                        ? "GitHub API rate limit reached. Try again later."
+                        : `GitHub API returned HTTP ${response.status}.`;
+                    throw new Error(detail);
+                }
+                const batch = await response.json();
+                if (!Array.isArray(batch)) throw new Error("GitHub returned an unexpected repository list.");
+                repositories.push(...batch.filter(repo => repo && !repo.disabled));
+                if (batch.length < 100) break;
             }
+            return repositories;
+        }
 
-            data.filter(item => item && typeof item === "object").forEach(project => {
-                grid.appendChild(createProjectCard(project));
+        function mapGitHubRepository(repo) {
+            const tags = [
+                ...(repo.language ? [repo.language] : []),
+                ...(Array.isArray(repo.topics) ? repo.topics : []),
+                ...(repo.fork ? ["Fork"] : []),
+                ...(repo.archived ? ["Archived"] : []),
+                ...(repo.private ? ["Private"] : [])
+            ];
+            const readmePath = `https://github.com/${repo.full_name}/blob/${encodeURIComponent(repo.default_branch || "main")}/README.md`;
+            return {
+                name: repo.name,
+                description: repo.description || "",
+                language: repo.language || "",
+                link: repo.html_url,
+                readme: readmePath,
+                homepage: repo.homepage,
+                tags: [...new Set(tags)],
+                stars: Number(repo.stargazers_count || 0),
+                forks: Number(repo.forks_count || 0),
+                watchers: Number(repo.subscribers_count || repo.watchers_count || 0),
+                openIssues: Number(repo.open_issues_count || 0),
+                license: repo.license?.spdx_id || repo.license?.name || "",
+                defaultBranch: repo.default_branch || "",
+                size: Number(repo.size || 0),
+                created: repo.created_at,
+                updated: repo.updated_at,
+                pushed: repo.pushed_at,
+                archived: Boolean(repo.archived),
+                fork: Boolean(repo.fork),
+                topics: Array.isArray(repo.topics) ? repo.topics : []
+            };
+        }
+
+        function renderProjectCards() {
+            const grid = document.getElementById("projects-grid");
+            const query = (document.getElementById("project-search")?.value || "").trim().toLowerCase();
+            const sort = document.getElementById("project-sort")?.value || "updated";
+            const projects = githubProjects.filter(project => {
+                const haystack = [
+                    project.name, project.description, project.language,
+                    ...(project.tags || []), project.license
+                ].join(" ").toLowerCase();
+                return haystack.includes(query);
             });
 
-            document.getElementById("project-count").textContent = String(data.length);
-            status.textContent = `${data.length} project${data.length === 1 ? "" : "s"}`;
-            if (data.length === 0) {
+            projects.sort((a, b) => {
+                if (sort === "name") return a.name.localeCompare(b.name);
+                if (sort === "stars") return b.stars - a.stars;
+                if (sort === "created") return new Date(b.created) - new Date(a.created);
+                return new Date(b.updated) - new Date(a.updated);
+            });
+
+            grid.replaceChildren();
+            projects.forEach(project => grid.appendChild(createProjectCard(project)));
+            document.getElementById("project-count").textContent = String(githubProjects.length);
+            if (!projects.length) {
                 const empty = document.createElement("p");
                 empty.className = "glass rounded-2xl p-6 muted text-sm";
-                empty.textContent = "No projects have been added yet. Add one to projects.js.";
+                empty.textContent = query ? "No repositories match your search." : "No public repositories were found for this account.";
                 grid.appendChild(empty);
+            }
+            const status = document.getElementById("projects-status");
+            status.textContent = `${projects.length} shown · ${githubProjects.length} repositories scanned`;
+        }
+
+        async function renderProjects() {
+            if (projectRefreshInProgress) return;
+            projectRefreshInProgress = true;
+            const status = document.getElementById("projects-status");
+            status.textContent = "Scanning GitHub repositories…";
+            try {
+                const repositories = await fetchGitHubProjects();
+                githubProjects = repositories.map(mapGitHubRepository);
+                renderProjectCards();
+                status.textContent = `${githubProjects.length} repositories synced from GitHub · ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                status.textContent = `GitHub sync failed: ${error.message}`;
+                if (!githubProjects.length) {
+                    const fallback = getProjectsDatabase();
+                    if (Array.isArray(fallback)) {
+                        githubProjects = fallback.map(project => ({
+                            name: project.name || "Untitled project",
+                            description: project.description || "",
+                            link: project.link || "",
+                            tags: project.tags || [],
+                            stars: 0, forks: 0, openIssues: 0,
+                            updated: "", created: "", pushed: ""
+                        }));
+                        renderProjectCards();
+                        status.textContent += " · showing saved fallback data";
+                    } else {
+                        const grid = document.getElementById("projects-grid");
+                        grid.replaceChildren();
+                        const message = document.createElement("p");
+                        message.className = "glass rounded-2xl p-6 text-sm text-red-400";
+                        message.textContent = "Could not load GitHub projects. Please refresh later.";
+                        grid.appendChild(message);
+                    }
+                }
+            } finally {
+                projectRefreshInProgress = false;
             }
         }
 
@@ -510,17 +655,19 @@
             loadSettings();
             document.getElementById("copyright-year").textContent = String(new Date().getFullYear());
 
-            const [projectsLoaded, gamesLoaded] = await Promise.all([
-                loadDataScript("projects.js"),
+            const [, gamesLoaded] = await Promise.all([
+                loadDataScript("projects.js?v=7"),
                 loadDataScript("games.js")
             ]);
 
-            renderProjects();
+            document.getElementById("project-search").addEventListener("input", renderProjectCards);
+            document.getElementById("project-sort").addEventListener("change", renderProjectCards);
+            document.getElementById("refresh-projects").addEventListener("click", renderProjects);
+            await renderProjects();
             renderGames();
+            // Scan GitHub again every 15 minutes while the portfolio is open.
+            window.setInterval(renderProjects, 15 * 60 * 1000);
 
-            if (!projectsLoaded) {
-                document.getElementById("projects-status").textContent = "projects.js request failed";
-            }
             if (!gamesLoaded) {
                 document.getElementById("games-status").textContent = "games.js request failed";
             }
