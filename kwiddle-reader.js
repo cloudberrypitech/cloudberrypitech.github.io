@@ -140,7 +140,8 @@
    if(n.nodeType!==1)continue;
    const tag=n.localName;let out;
    if(tag==="frame"){appendFrame(n,frag);continue}
-   if(tag==="span"||tag==="a"||tag==="s"||tag==="tab"||tag==="line-break"||tag==="bookmark"||tag==="bookmark-start"||tag==="bookmark-end"||tag==="reference-mark"||tag==="reference-mark-start"||tag==="reference-mark-end"){
+   if(tag==="s"){const count=Math.max(1,Math.min(10000,Number(n.getAttribute("text:c")||1)));frag.append(document.createTextNode(" ".repeat(count)));continue}
+   if(tag==="span"||tag==="a"||tag==="tab"||tag==="line-break"||tag==="bookmark"||tag==="bookmark-start"||tag==="bookmark-end"||tag==="reference-mark"||tag==="reference-mark-start"||tag==="reference-mark-end"){
     out=document.createElement(tag==="a"?"a":"span");
     const href=n.getAttribute("xlink:href");
     if(tag==="a"&&href){const safe=safeHref(href);if(safe){out.href=safe;out.target="_blank";out.rel="noopener noreferrer"}}
@@ -226,7 +227,7 @@
    const response=await fetch(books[index].url,{cache:"no-store",headers:{"Cache-Control":"no-cache"}});if(!response.ok)throw Error("Download failed ("+response.status+")");
    const zip=await JSZip.loadAsync(await response.arrayBuffer());const xmlFile=zip.file("content.xml");if(!xmlFile)throw Error("This ODT has no content.xml file");
    const xml= new DOMParser().parseFromString(await xmlFile.async("text"),"application/xml");if(xml.querySelector("parsererror"))throw Error("Invalid ODT XML");
-   footnotes=[];collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v)}}
+   footnotes=[];collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;const contentLists=listStyleRegistry;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v);for(const [k,v] of contentLists)if(!listStyleRegistry.has(k))listStyleRegistry.set(k,v)}}
    const body=xml.getElementsByTagName("office:body")[0]?.firstElementChild;if(!body)throw Error("No readable document body found");
    const content=buildBlocks(body);$("paper").replaceChildren(content);
    if(footnotes.length){const section=document.createElement("section");section.className="odt-footnotes";const heading=document.createElement("h2");heading.textContent="Notes";section.append(heading,...footnotes);$("paper").append(section)}
