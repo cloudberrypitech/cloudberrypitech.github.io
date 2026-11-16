@@ -4,7 +4,7 @@
  const API=`https://api.github.com/repos/${OWNER}/${REPO}/contents/${BOOK_DIR}?ref=${BRANCH}`;
  const RAW=`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/`;
  const $=id=>document.getElementById(id);
- let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[];
+ let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[],styleRegistry=new Map(),defaultStyles=new Map();
  const progressKey="kwiddle-reader-progress-v1";
  function cookieValue(name){const prefix=encodeURIComponent(name)+"=";const item=document.cookie.split("; ").find(part=>part.startsWith(prefix));return item?decodeURIComponent(item.slice(prefix.length)):null}
  function syncSiteTheme(){
@@ -37,14 +37,58 @@
   visible.forEach(b=>{const button=document.createElement("button");button.className="book"+(b.i===current?" active":"");button.innerHTML="";const title=document.createElement("span");title.textContent=b.title;const small=document.createElement("small");small.textContent=(b.size/1024).toFixed(1)+" KB · ODT";button.append(title,small);button.addEventListener("click",()=>openBook(b.i));$("bookList").append(button)})
  }
  function xmlText(node){return Array.from(node.childNodes).map(n=>n.nodeType===3?n.nodeValue:n.nodeType===1?xmlText(n):"").join("")}
- function styleMap(el,styleNames){
-  const props={};const family=el.getAttribute("fo:font-family")||el.getAttribute("style:font-name");if(family){props["font-family"]=family.replace(/^['"]|['"]$/g,"");activeFonts.add(family.replace(/^['"]|['"]$/g,""))}
-  const size=el.getAttribute("fo:font-size");if(size)props["font-size"]=size;
-  const weight=el.getAttribute("fo:font-weight");if(weight)props["font-weight"]=weight;
-  const italic=el.getAttribute("fo:font-style");if(italic)props["font-style"]=italic;
-  const color=el.getAttribute("fo:color");if(color&&/^#[0-9a-f]{3,8}$/i.test(color))props.color=color;
-  const bg=el.getAttribute("fo:background-color");if(bg&&/^#[0-9a-f]{3,8}$/i.test(bg))props["background-color"]=bg;
-  return Object.entries(props).map(([k,v])=>k+":"+v).join(";");
+ function styleKey(family,name){return family+":"+name}
+ function collectStyles(doc){
+  styleRegistry=new Map();defaultStyles=new Map();
+  if(!doc)return;
+  const all=Array.from(doc.getElementsByTagName("*"));
+  for(const el of all){
+   if(el.localName!=="style"&&el.localName!=="default-style")continue;
+   const family=el.getAttribute("style:family")||"";
+   const name=el.getAttribute("style:name")||"";
+   if(!family)continue;
+   if(el.localName==="default-style"){defaultStyles.set(family,el);continue}
+   if(name)styleRegistry.set(styleKey(family,name),el);
+  }
+ }
+ function styleChain(el,family){
+  const name=el.getAttribute("text:style-name")||el.getAttribute("draw:style-name")||el.getAttribute("table:style-name")||el.getAttribute("style:style-name");
+  const chain=[];let current=name,guard=0;
+  while(current&&guard++<20){const item=styleRegistry.get(styleKey(family,current));if(!item)break;chain.unshift(item);current=item.getAttribute("style:parent-style-name")}
+  return chain;
+ }
+ function cssFromProperties(props,family){
+  const out={};
+  const copy=(from,to)=>{if(props.hasAttribute(from)){const v=props.getAttribute(from);if(v)out[to]=v}};
+  copy("fo:font-family","font-family");copy("fo:font-size","font-size");copy("fo:font-weight","font-weight");copy("fo:font-style","font-style");copy("fo:color","color");copy("fo:background-color","background-color");
+  copy("fo:text-align","text-align");copy("fo:margin-left","margin-left");copy("fo:margin-right","margin-right");copy("fo:margin-top","margin-top");copy("fo:margin-bottom","margin-bottom");copy("fo:text-indent","text-indent");copy("fo:line-height","line-height");copy("fo:letter-spacing","letter-spacing");copy("fo:keep-with-next","break-after");
+  copy("fo:padding","padding");copy("fo:padding-left","padding-left");copy("fo:padding-right","padding-right");copy("fo:padding-top","padding-top");copy("fo:padding-bottom","padding-bottom");
+  copy("fo:border","border");copy("fo:border-left","border-left");copy("fo:border-right","border-right");copy("fo:border-top","border-top");copy("fo:border-bottom","border-bottom");
+  copy("fo:width","width");copy("fo:height","height");copy("fo:vertical-align","vertical-align");copy("fo:wrap-option","overflow-wrap");
+  const underline=props.getAttribute("style:text-underline-style");if(underline&&underline!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" underline";
+  const strike=props.getAttribute("style:text-line-through-style");if(strike&&strike!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" line-through";
+  const bg=props.getAttribute("fo:background-color");if(bg==="transparent")delete out["background-color"];
+  const familyName=props.getAttribute("style:font-name");if(familyName){out["font-family"]=familyName;activeFonts.add(familyName)}
+  const textTransform=props.getAttribute("fo:text-transform");if(textTransform)out["text-transform"]=textTransform;
+  if(family==="table-cell"){copy("fo:background-color","background-color");copy("style:vertical-align","vertical-align")}
+  return out;
+ }
+ function styleMap(el,family){
+  const merged={};
+  const apply=style=>{
+   for(const child of style.children){
+    const part=cssFromProperties(child,family);
+    Object.assign(merged,part);
+   }
+  };
+  const defaults=defaultStyles.get(family);if(defaults)apply(defaults);
+  styleChain(el,family).forEach(apply);
+  const direct=cssFromProperties(el,family);Object.assign(merged,direct);
+  if(merged["font-family"])activeFonts.add(merged["font-family"]);
+  return Object.entries(merged).map(([k,v])=>k+":"+v).join(";");
+ }
+ function applyElementStyle(out,node,family){
+  const css=styleMap(node,family);if(css)out.setAttribute("style",css);
  }
  function renderInline(node){
   const frag=document.createDocumentFragment();
@@ -55,13 +99,19 @@
    if(tag==="span"||tag==="a"||tag==="s"||tag==="tab"||tag==="line-break"||tag==="bookmark"||tag==="bookmark-start"||tag==="bookmark-end"){
     out=document.createElement(tag==="a"?"a":tag==="s"?"s":"span");
     const href=n.getAttribute("xlink:href");if(tag==="a"&&href){try{const u=new URL(href,location.href);if(["http:","https:","mailto:"].includes(u.protocol)){out.href=u.href;out.target="_blank";out.rel="noopener noreferrer"}}catch{}}
-    const st=styleMap(n);if(st)out.setAttribute("style",st);out.append(renderInline(n));frag.append(out);
+    applyElementStyle(out,n,"text");
+    if(tag==="tab")frag.append(document.createTextNode("\t"));
+    else if(tag==="line-break")frag.append(document.createElement("br"));
+    else{out.append(renderInline(n));frag.append(out)}
+   }else if(tag==="s"){
+    const count=Math.max(1,Math.min(100,Number(n.getAttribute("text:c")||1)));frag.append(document.createTextNode(" ".repeat(count)));
    }else if(tag==="tab"){frag.append(document.createTextNode("\t"))}
    else if(tag==="line-break"){frag.append(document.createElement("br"))}
    else{frag.append(renderInline(n))}
   }
   return frag
  }
+ function appendBlockStyle(el,node,family){applyElementStyle(el,node,family);const align=el.style.textAlign;if(align)el.dataset.align=align}
  function buildBlocks(root){
   const frag=document.createDocumentFragment();
   for(const n of root.children){
@@ -69,34 +119,46 @@
    if(tag==="p"||tag==="h"){
     const level=Math.max(1,Math.min(6,Number(n.getAttribute("text:outline-level")||1)));
     const p=document.createElement(tag==="h"?"h"+level:"p");
-    const st=styleMap(n);if(st)p.setAttribute("style",st);
-    const align=n.getAttribute("fo:text-align");if(["center","right","justify","left"].includes(align))p.dataset.align=align;
-    p.append(renderInline(n));frag.append(p);
+    appendBlockStyle(p,n,"paragraph");p.append(renderInline(n));frag.append(p);
    }else if(tag==="list"){
-    const list=document.createElement(n.getAttribute("text:style-name")?.toLowerCase().includes("number")?"ol":"ul");
-    for(const item of n.children){if(item.localName!=="list-item")continue;const li=document.createElement("li");li.append(buildBlocks(item));list.append(li)}frag.append(list);
+    const styleName=n.getAttribute("text:style-name")||"";
+    const style=styleRegistry.get(styleKey("list",styleName));
+    const numbered=style?Array.from(style.children).some(x=>x.localName==="list-level-style-number"):styleName.toLowerCase().includes("number");
+    const list=document.createElement(numbered?"ol":"ul");
+    if(styleName)list.dataset.odtStyle=styleName;
+    for(const item of n.children){if(item.localName!=="list-item"&&item.localName!=="list-header")continue;const li=document.createElement("li");li.append(buildBlocks(item));list.append(li)}frag.append(list);
    }else if(tag==="table"){
-    const table=document.createElement("table"),body=document.createElement("tbody");
+    const table=document.createElement("table");applyElementStyle(table,n,"table");
+    const body=document.createElement("tbody");
     const rows=Array.from(n.children).flatMap(child=>child.localName==="table-header-rows"||child.localName==="table-rows"?Array.from(child.children).filter(row=>row.localName==="table-row"):(child.localName==="table-row"?[child]:[]));
     for(const row of rows){
-     const tr=document.createElement("tr");
-     for(const cell of row.children){if(!["table-cell","covered-table-cell"].includes(cell.localName))continue;const td=document.createElement("td");td.append(buildBlocks(cell));const span=cell.getAttribute("table:number-columns-spanned");if(span)td.colSpan=Math.max(1,Number(span));const rowSpan=cell.getAttribute("table:number-rows-spanned");if(rowSpan)td.rowSpan=Math.max(1,Number(rowSpan));tr.append(td)}body.append(tr)
+     const tr=document.createElement("tr");applyElementStyle(tr,row,"table-row");
+     for(const cell of row.children){
+      if(!["table-cell","covered-table-cell"].includes(cell.localName))continue;
+      const isHeader=cell.parentElement?.parentElement?.localName==="table-header-rows";
+      const td=document.createElement(isHeader?"th":"td");applyElementStyle(td,cell,"table-cell");td.append(buildBlocks(cell));
+      const span=cell.getAttribute("table:number-columns-spanned");if(span)td.colSpan=Math.max(1,Number(span));
+      const rowSpan=cell.getAttribute("table:number-rows-spanned");if(rowSpan)td.rowSpan=Math.max(1,Number(rowSpan));tr.append(td)
+     }body.append(tr)
     }table.append(body);frag.append(table);
    }else if(tag==="frame"){
-    const img=n.querySelector("image");if(img){const src=img.getAttribute("xlink:href");if(src){const image=document.createElement("img");image.alt=n.getAttribute("draw:name")||"Document image";image.dataset.odtPath=src;frag.append(image)}}
+    const img=n.querySelector("image");if(img){const src=img.getAttribute("xlink:href");if(src){const image=document.createElement("img");image.alt=n.getAttribute("draw:name")||"Document image";image.dataset.odtPath=src;applyElementStyle(image,n,"graphic");frag.append(image)}}
    }else if(tag==="image"){
-    const src=n.getAttribute("xlink:href");if(src){const image=document.createElement("img");image.alt="Document image";image.dataset.odtPath=src;frag.append(image)}
-   }else if(tag==="section"||tag==="div"){frag.append(buildBlocks(n))}
+    const src=n.getAttribute("xlink:href");if(src){const image=document.createElement("img");image.alt="Document image";image.dataset.odtPath=src;applyElementStyle(image,n,"graphic");frag.append(image)}
+   }else if(["section","div","list-item","list-header","table-cell","table-row"].includes(tag)){frag.append(buildBlocks(n))}
+   else if(tag==="note"){
+    const note=document.createElement("aside");note.className="odt-note";note.append(buildBlocks(n));frag.append(note)
+   }
   }
   return frag
- }
- async function openBook(index){
+ } async function openBook(index){
   if(index<0||index>=books.length)return;current=index;renderList();$("prev").disabled=index===0;$("next").disabled=index===books.length-1;
   $("paper").innerHTML='<div class="empty">Opening '+books[index].title+'…</div>';$("fontInfo").textContent="";activeFonts.clear();imageUrls.forEach(URL.revokeObjectURL);imageUrls=[];
   try{
    const response=await fetch(books[index].url,{cache:"no-store",headers:{"Cache-Control":"no-cache"}});if(!response.ok)throw Error("Download failed ("+response.status+")");
    const zip=await JSZip.loadAsync(await response.arrayBuffer());const xmlFile=zip.file("content.xml");if(!xmlFile)throw Error("This ODT has no content.xml file");
    const xml= new DOMParser().parseFromString(await xmlFile.async("text"),"application/xml");if(xml.querySelector("parsererror"))throw Error("Invalid ODT XML");
+   collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v)}}
    const body=xml.getElementsByTagName("office:body")[0]?.firstElementChild;if(!body)throw Error("No readable document body found");
    const content=buildBlocks(body);$("paper").replaceChildren(content);
    for(const img of $("paper").querySelectorAll("img[data-odt-path]")){const path=img.dataset.odtPath.replace(/^\.\//,"");const file=zip.file(path);if(file){const blob=await file.async("blob");const url=URL.createObjectURL(blob);imageUrls.push(url);img.src=url}else img.remove()}
