@@ -4,7 +4,7 @@
  const API=`https://api.github.com/repos/${OWNER}/${REPO}/contents/${BOOK_DIR}?ref=${BRANCH}`;
  const RAW=`https://raw.githubusercontent.com/${OWNER}/${REPO}/${BRANCH}/`;
  const $=id=>document.getElementById(id);
- let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[],styleRegistry=new Map(),defaultStyles=new Map();
+ let books=[],current=-1,scale=17,searchMatches=[],matchIndex=0,activeFonts=new Set(),imageUrls=[],styleRegistry=new Map(),defaultStyles=new Map(),listStyleRegistry=new Map(),footnotes=[];
  const progressKey="kwiddle-reader-progress-v1";
  function cookieValue(name){const prefix=encodeURIComponent(name)+"=";const item=document.cookie.split("; ").find(part=>part.startsWith(prefix));return item?decodeURIComponent(item.slice(prefix.length)):null}
  function syncSiteTheme(){
@@ -39,9 +39,15 @@
  function xmlText(node){return Array.from(node.childNodes).map(n=>n.nodeType===3?n.nodeValue:n.nodeType===1?xmlText(n):"").join("")}
  function styleKey(family,name){return family+":"+name}
  function collectStyles(doc){
-  styleRegistry=new Map();defaultStyles=new Map();
+  styleRegistry=new Map();defaultStyles=new Map();listStyleRegistry=new Map();
   if(!doc)return;
   const all=Array.from(doc.getElementsByTagName("*"));
+  for(const el of all){
+   if(el.localName==="list-style"){
+    const name=el.getAttribute("style:name");
+    if(name)listStyleRegistry.set(name,el);
+   }
+  }
   for(const el of all){
    if(el.localName!=="style"&&el.localName!=="default-style")continue;
    const family=el.getAttribute("style:family")||"";
@@ -61,10 +67,15 @@
   const out={};
   const copy=(from,to)=>{if(props.hasAttribute(from)){const v=props.getAttribute(from);if(v)out[to]=v}};
   copy("fo:font-family","font-family");copy("fo:font-size","font-size");copy("fo:font-weight","font-weight");copy("fo:font-style","font-style");copy("fo:color","color");copy("fo:background-color","background-color");
-  copy("fo:text-align","text-align");copy("fo:margin-left","margin-left");copy("fo:margin-right","margin-right");copy("fo:margin-top","margin-top");copy("fo:margin-bottom","margin-bottom");copy("fo:text-indent","text-indent");copy("fo:line-height","line-height");copy("fo:letter-spacing","letter-spacing");copy("fo:keep-with-next","break-after");
+  copy("fo:text-align","text-align");copy("fo:text-align-last","text-align-last");copy("fo:margin-left","margin-left");copy("fo:margin-right","margin-right");copy("fo:margin-top","margin-top");copy("fo:margin-bottom","margin-bottom");copy("fo:text-indent","text-indent");copy("fo:line-height","line-height");copy("fo:letter-spacing","letter-spacing");copy("fo:word-spacing","word-spacing");
   copy("fo:padding","padding");copy("fo:padding-left","padding-left");copy("fo:padding-right","padding-right");copy("fo:padding-top","padding-top");copy("fo:padding-bottom","padding-bottom");
   copy("fo:border","border");copy("fo:border-left","border-left");copy("fo:border-right","border-right");copy("fo:border-top","border-top");copy("fo:border-bottom","border-bottom");
-  copy("fo:width","width");copy("fo:height","height");copy("fo:vertical-align","vertical-align");copy("fo:wrap-option","overflow-wrap");
+  copy("fo:width","width");copy("fo:height","height");copy("fo:min-width","min-width");copy("fo:max-width","max-width");copy("fo:vertical-align","vertical-align");copy("fo:wrap-option","overflow-wrap");copy("fo:hyphenate","hyphens");
+  copy("fo:direction","direction");copy("fo:writing-mode","writing-mode");copy("fo:display","display");
+  const keep=props.getAttribute("fo:keep-with-next");if(keep==="always")out["break-after"]="avoid";
+  const keepTogether=props.getAttribute("fo:keep-together");if(keepTogether==="always")out["break-inside"]="avoid";
+  const breakBefore=props.getAttribute("fo:break-before");if(breakBefore==="page")out["break-before"]="page";else if(breakBefore==="column")out["break-before"]="column";
+  const breakAfter=props.getAttribute("fo:break-after");if(breakAfter==="page")out["break-after"]="page";else if(breakAfter==="column")out["break-after"]="column";
   const underline=props.getAttribute("style:text-underline-style");if(underline&&underline!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" underline";
   const strike=props.getAttribute("style:text-line-through-style");if(strike&&strike!=="none")out["text-decoration"]=(out["text-decoration"]||"")+" line-through";
   const bg=props.getAttribute("fo:background-color");if(bg==="transparent")delete out["background-color"];
@@ -90,24 +101,71 @@
  function applyElementStyle(out,node,family){
   const css=styleMap(node,family);if(css)out.setAttribute("style",css);
  }
+ function safeHref(href){
+  if(!href)return null;
+  try{const u=new URL(href,location.href);return ["http:","https:","mailto:"].includes(u.protocol)?u.href:null}catch{return null}
+ }
+ function frameImage(frame){
+  const imageNode=frame.querySelector("image");
+  if(!imageNode)return null;
+  const href=imageNode.getAttribute("xlink:href")||imageNode.getAttributeNS("http://www.w3.org/1999/xlink","href");
+  if(!href)return null;
+  const img=document.createElement("img");
+  img.dataset.odtPath=href;
+  img.alt=imageNode.getAttribute("svg:title")||imageNode.getAttribute("svg:desc")||frame.getAttribute("svg:title")||frame.getAttribute("svg:desc")||frame.getAttribute("draw:name")||"Document image";
+  const width=frame.getAttribute("svg:width"),height=frame.getAttribute("svg:height");
+  if(width&&/^\s*\d+(?:\.\d+)?\s*(px|pt|cm|mm|in)?\s*$/i.test(width))img.style.width=width;
+  if(height&&/^\s*\d+(?:\.\d+)?\s*(px|pt|cm|mm|in)?\s*$/i.test(height))img.style.height=height;
+  const anchor=frame.getAttribute("text:anchor-type")||"as-char";
+  img.className=anchor==="as-char"||anchor==="char"?"odt-inline-image":"odt-framed-image";
+  applyElementStyle(img,frame,"graphic");
+  img.title=img.alt;
+  return img;
+ }
+ function appendFrame(frame,frag){
+  const img=frameImage(frame);
+  if(img){frag.append(img);return}
+  const object=frame.querySelector("object,object-ole,plugin");
+  const href=object?.getAttribute("xlink:href");
+  if(href){
+   const link=document.createElement("a");link.textContent=frame.getAttribute("draw:name")||"Open embedded object";link.dataset.odtObjectPath=href;link.className="odt-object-link";frag.append(link);
+  }
+  const shapeText=Array.from(frame.querySelectorAll("p,h")).map(el=>el.textContent).join(" ").trim();
+  if(shapeText){const shape=document.createElement("span");shape.className="odt-shape-text";shape.textContent=shapeText;applyElementStyle(shape,frame,"graphic");frag.append(shape)}
+ }
  function renderInline(node){
   const frag=document.createDocumentFragment();
   for(const n of node.childNodes){
    if(n.nodeType===3){frag.append(document.createTextNode(n.nodeValue));continue}
    if(n.nodeType!==1)continue;
    const tag=n.localName;let out;
-   if(tag==="span"||tag==="a"||tag==="s"||tag==="tab"||tag==="line-break"||tag==="bookmark"||tag==="bookmark-start"||tag==="bookmark-end"){
-    out=document.createElement(tag==="a"?"a":tag==="s"?"s":"span");
-    const href=n.getAttribute("xlink:href");if(tag==="a"&&href){try{const u=new URL(href,location.href);if(["http:","https:","mailto:"].includes(u.protocol)){out.href=u.href;out.target="_blank";out.rel="noopener noreferrer"}}catch{}}
+   if(tag==="frame"){appendFrame(n,frag);continue}
+   if(tag==="span"||tag==="a"||tag==="s"||tag==="tab"||tag==="line-break"||tag==="bookmark"||tag==="bookmark-start"||tag==="bookmark-end"||tag==="reference-mark"||tag==="reference-mark-start"||tag==="reference-mark-end"){
+    out=document.createElement(tag==="a"?"a":"span");
+    const href=n.getAttribute("xlink:href");
+    if(tag==="a"&&href){const safe=safeHref(href);if(safe){out.href=safe;out.target="_blank";out.rel="noopener noreferrer"}}
+    const markName=n.getAttribute("text:name")||n.getAttribute("text:ref-name");
+    if(markName&&/^[a-zA-Z][\w:.-]*$/.test(markName))out.id=markName;
     applyElementStyle(out,n,"text");
     if(tag==="tab")frag.append(document.createTextNode("\t"));
     else if(tag==="line-break")frag.append(document.createElement("br"));
+    else if(tag==="bookmark-end"||tag==="reference-mark-end")continue;
     else{out.append(renderInline(n));frag.append(out)}
-   }else if(tag==="s"){
-    const count=Math.max(1,Math.min(100,Number(n.getAttribute("text:c")||1)));frag.append(document.createTextNode(" ".repeat(count)));
+   }else if(tag==="note"){
+    const note=document.createElement("sup");note.className="odt-note-marker";note.textContent=n.querySelector("note-citation")?.textContent||String(footnotes.length+1);note.title=Array.from(n.querySelectorAll("note-body p")).map(p=>p.textContent).join(" ");frag.append(note);
+    const body=n.querySelector("note-body");if(body){const aside=document.createElement("aside");aside.className="odt-footnote";aside.append(renderInline(body));footnotes.push(aside)}
    }else if(tag==="tab"){frag.append(document.createTextNode("\t"))}
    else if(tag==="line-break"){frag.append(document.createElement("br"))}
-   else{frag.append(renderInline(n))}
+   else if(tag==="soft-page-break"){const br=document.createElement("hr");br.className="odt-page-break";frag.append(br)}
+   else if(["date","time","page-number","page-count","chapter","sequence","variable-get","user-field-get","database-display"].includes(tag)){
+    out=document.createElement("span");out.className="odt-field";out.textContent=n.textContent||n.getAttribute("text:current-value")||"";frag.append(out)
+   }else if(tag==="annotation"||tag==="annotation-end"||tag==="tracked-changes"||tag==="change-start"||tag==="change-end"){
+    continue;
+   }else if(tag==="object"||tag==="object-ole"||tag==="plugin"){
+    const href=n.getAttribute("xlink:href");if(href){const link=document.createElement("a");link.textContent="Open embedded object";link.dataset.odtObjectPath=href;frag.append(link)}
+   }else if(tag==="custom-shape"||tag==="rect"||tag==="ellipse"||tag==="line"||tag==="connector"||tag==="polygon"||tag==="polyline"||tag==="path"){
+    const shape=document.createElement("span");shape.className="odt-shape-text";applyElementStyle(shape,n,"graphic");shape.append(renderInline(n));frag.append(shape)
+   }else{frag.append(renderInline(n))}
   }
   return frag
  }
@@ -122,11 +180,21 @@
     appendBlockStyle(p,n,"paragraph");p.append(renderInline(n));frag.append(p);
    }else if(tag==="list"){
     const styleName=n.getAttribute("text:style-name")||"";
-    const style=styleRegistry.get(styleKey("list",styleName));
-    const numbered=style?Array.from(style.children).some(x=>x.localName==="list-level-style-number"):styleName.toLowerCase().includes("number");
+    const style=listStyleRegistry.get(styleName);
+    const levels=style?Array.from(style.children).filter(x=>x.localName.startsWith("list-level-style-")):[];
+    const level=Number(n.getAttribute("text:level")||1);
+    const definition=levels.find(x=>Number(x.getAttribute("text:level")||1)===level)||levels[0];
+    const numbered=definition?definition.localName==="list-level-style-number":styleName.toLowerCase().includes("number");
     const list=document.createElement(numbered?"ol":"ul");
     if(styleName)list.dataset.odtStyle=styleName;
-    for(const item of n.children){if(item.localName!=="list-item"&&item.localName!=="list-header")continue;const li=document.createElement("li");li.append(buildBlocks(item));list.append(li)}frag.append(list);
+    if(numbered&&definition){
+     const fmt=definition.getAttribute("style:num-format")||"1";
+     const typeMap={"1":"decimal","a":"lower-alpha","A":"upper-alpha","i":"lower-roman","I":"upper-roman"};
+     if(typeMap[fmt])list.style.listStyleType=typeMap[fmt];
+     const start=Number(definition.getAttribute("text:start-value"));if(Number.isFinite(start)&&start>1)list.start=start;
+    }
+    for(const item of n.children){if(item.localName!=="list-item"&&item.localName!=="list-header")continue;const li=document.createElement("li");li.append(buildBlocks(item));list.append(li)}
+    frag.append(list);
    }else if(tag==="table"){
     const table=document.createElement("table");applyElementStyle(table,n,"table");
     const body=document.createElement("tbody");
@@ -158,10 +226,25 @@
    const response=await fetch(books[index].url,{cache:"no-store",headers:{"Cache-Control":"no-cache"}});if(!response.ok)throw Error("Download failed ("+response.status+")");
    const zip=await JSZip.loadAsync(await response.arrayBuffer());const xmlFile=zip.file("content.xml");if(!xmlFile)throw Error("This ODT has no content.xml file");
    const xml= new DOMParser().parseFromString(await xmlFile.async("text"),"application/xml");if(xml.querySelector("parsererror"))throw Error("Invalid ODT XML");
-   collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v)}}
+   footnotes=[];collectStyles(xml);const stylesFile=zip.file("styles.xml");if(stylesFile){const stylesXml=new DOMParser().parseFromString(await stylesFile.async("text"),"application/xml");if(!stylesXml.querySelector("parsererror")){const contentStyles=styleRegistry;const contentDefaults=defaultStyles;collectStyles(stylesXml);for(const [k,v] of contentStyles)if(!styleRegistry.has(k))styleRegistry.set(k,v);for(const [k,v] of contentDefaults)if(!defaultStyles.has(k))defaultStyles.set(k,v)}}
    const body=xml.getElementsByTagName("office:body")[0]?.firstElementChild;if(!body)throw Error("No readable document body found");
    const content=buildBlocks(body);$("paper").replaceChildren(content);
-   for(const img of $("paper").querySelectorAll("img[data-odt-path]")){const path=img.dataset.odtPath.replace(/^\.\//,"");const file=zip.file(path);if(file){const blob=await file.async("blob");const url=URL.createObjectURL(blob);imageUrls.push(url);img.src=url}else img.remove()}
+   if(footnotes.length){const section=document.createElement("section");section.className="odt-footnotes";const heading=document.createElement("h2");heading.textContent="Notes";section.append(heading,...footnotes);$("paper").append(section)}
+   const zipNames=Object.keys(zip.files);
+   function findPackageFile(href){
+    let decoded=href;try{decoded=decodeURIComponent(href)}catch{}
+    decoded=decoded.split("#")[0].split("?")[0].replace(/^\/+/,"");
+    const candidates=[decoded,decoded.replace(/^\.\//,"")];
+    let normalized=decoded;
+    const pieces=[];for(const part of normalized.split("/")){if(!part||part===".")continue;if(part==="..")pieces.pop();else pieces.push(part)}
+    normalized=pieces.join("/");
+    candidates.push(normalized);
+    const base=normalized.split("/").pop();if(base)candidates.push("Pictures/"+base,base);
+    for(const candidate of candidates){const file=zip.file(candidate);if(file&&!file.dir)return file}
+    const match=zipNames.find(name=>!zip.files[name].dir&&base&&name.endsWith("/"+base));return match?zip.file(match):null
+   }
+   for(const img of $("paper").querySelectorAll("img[data-odt-path]")){const file=findPackageFile(img.dataset.odtPath);if(file){const blob=await file.async("blob");const url=URL.createObjectURL(blob);imageUrls.push(url);img.src=url;img.addEventListener("error",()=>{img.alt="Could not display embedded image: "+(img.alt||"image")},{once:true})}else{img.replaceWith(document.createTextNode("["+img.alt+" unavailable in this ODT package]"))}}
+   for(const link of $("paper").querySelectorAll("a[data-odt-object-path]")){const file=findPackageFile(link.dataset.odtObjectPath);if(file){const blob=await file.async("blob");const url=URL.createObjectURL(blob);imageUrls.push(url);link.href=url;link.target="_blank";link.rel="noopener noreferrer"}else link.replaceWith(document.createTextNode("[Embedded object unavailable]"))}
    const headings=Array.from($("paper").querySelectorAll("h1,h2,h3,h4,h5,h6"));$("outline").replaceChildren();
    if(!headings.length)$("outline").textContent="No headings in this book.";
    headings.forEach((h,i)=>{if(!h.textContent.trim())return;const item=document.createElement("div");item.className="outline";item.style.paddingLeft=(Number(h.tagName[1])-1)*10+12+"px";item.textContent=h.textContent;item.addEventListener("click",()=>h.scrollIntoView({behavior:"smooth",block:"start"}));$("outline").append(item)});
