@@ -114,7 +114,7 @@
       return;
     }
     try {
-      if (!document.fullscreenElement) await $("paper-wrap").requestFullscreen();
+      if (!document.fullscreenElement) await document.querySelector(".paper-wrap").requestFullscreen();
       else await document.exitFullscreen();
     } catch (error) { alert("Fullscreen is unavailable: " + error.message); }
   });
