@@ -1,0 +1,97 @@
+name: Sync Kwiddle books
+
+on:
+  workflow_dispatch:
+  repository_dispatch:
+    types: [kwiddle-books-updated]
+  schedule:
+    - cron: "17 * * * *"
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/sync-kwiddle-books.yml"
+
+permissions:
+  contents: write
+
+concurrency:
+  group: kwiddle-book-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out website
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          path: website
+
+      - name: Check out Kwiddle source
+        uses: actions/checkout@v4
+        with:
+          repository: cloudberrypitech/kwiddle
+          ref: main
+          path: kwiddle-source
+
+      - name: Mirror complete ODT books and build catalogue
+        env:
+          SOURCE_DIR: kwiddle-source/src/kwiddle/books
+          TARGET_DIR: website/books/kwiddle
+        run: |
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          import shutil
+          from pathlib import Path
+
+          source = Path(os.environ["SOURCE_DIR"])
+          target = Path(os.environ["TARGET_DIR"])
+          if not source.is_dir():
+              raise SystemExit(f"Kwiddle book folder not found: {source}")
+
+          if target.exists():
+              shutil.rmtree(target)
+          target.mkdir(parents=True)
+
+          catalogue = []
+          seen = set()
+          for path in sorted(source.rglob("*")):
+              if not path.is_file() or path.name.startswith(".~") or path.suffix.lower() != ".odt":
+                  continue
+              # The current browser reader expects a flat filename. Keep the
+              # original basename and fail rather than silently overwrite.
+              name = path.name
+              if name in seen:
+                  raise SystemExit(f"Duplicate book filename in source tree: {name}")
+              seen.add(name)
+              data = path.read_bytes()
+              (target / name).write_bytes(data)
+              catalogue.append({
+                  "type": "file",
+                  "name": name,
+                  "size": len(data),
+                  "sha": hashlib.sha1(data).hexdigest(),
+              })
+
+          (target / "manifest.json").write_text(
+              json.dumps(catalogue, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8",
+          )
+          print(f"Mirrored {len(catalogue)} ODT books.")
+          PY
+
+      - name: Commit updated book library
+        working-directory: website
+        run: |
+          if git diff --quiet -- books/kwiddle; then
+            echo "Book mirror is already up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add books/kwiddle
+          git commit -m "Sync Kwiddle online book library"
+          git push origin HEAD:main
