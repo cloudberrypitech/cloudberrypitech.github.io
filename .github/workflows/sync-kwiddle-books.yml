@@ -86,7 +86,7 @@ jobs:
       - name: Commit updated book library
         working-directory: website
         run: |
-          if git diff --quiet -- books/kwiddle; then
+          if [ -z "$(git status --porcelain -- books/kwiddle)" ]; then
             echo "Book mirror is already up to date."
             exit 0
           fi
