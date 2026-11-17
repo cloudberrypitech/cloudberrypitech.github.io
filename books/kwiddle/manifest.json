@@ -1,0 +1,26 @@
+[
+  {
+    "type": "file",
+    "name": "contribution_guidelines.odt",
+    "size": 26308,
+    "sha": "073c6d6fb2d183bafdc425e0615810d7a00a42b0"
+  },
+  {
+    "type": "file",
+    "name": "kwiddle-test-document.odt",
+    "size": 39011,
+    "sha": "47d4fe18dd66fe146d07eb5bb79edfc3604e4243"
+  },
+  {
+    "type": "file",
+    "name": "the_little_sun.odt",
+    "size": 16984,
+    "sha": "8f09d208fbe2d3c9945b01819223b8aa5d29b223"
+  },
+  {
+    "type": "file",
+    "name": "understanding_trigonometry.odt",
+    "size": 10962,
+    "sha": "22bbb8821fa45b5c9d08692cecb472b509f950ed"
+  }
+]
